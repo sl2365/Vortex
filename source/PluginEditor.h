@@ -207,7 +207,7 @@ private:
     LookAndFeel zoomMenuLookAndFeel;
     juce::Component content;
     std::vector<std::unique_ptr<Dial>> dials;
-    std::array<Dial*, 24> effectDials {};
+    std::array<Dial*, 26> effectDials {};
     std::array<Dial*, 2> phaserDetailDials {};
     std::array<Dial*, 4> effectLevelDials {};
     std::array<juce::ToggleButton, 4> effectEnabledButtons {};

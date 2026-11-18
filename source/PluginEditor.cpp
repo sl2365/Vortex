@@ -3241,8 +3241,13 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
         selectedPresetFolder = storedPresetFolder;
     }
 
+#if VORTEX_HAS_PNG_LOGO
+    logoDrawable = juce::Drawable::createFromImageData(
+        BinaryData::logo_png, static_cast<size_t>(BinaryData::logo_pngSize));
+#else
     logoDrawable = juce::Drawable::createFromImageData(
         BinaryData::logo_svg, static_cast<size_t>(BinaryData::logo_svgSize));
+#endif
     setLookAndFeel(&lookAndFeel);
     // Dedicated Dusk-style zoom palette; other popup menus remain unchanged.
     zoomMenuLookAndFeel.setColour(juce::PopupMenu::backgroundColourId,
@@ -3258,7 +3263,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     content.addMouseListener(this, true);
     content.setInterceptsMouseClicks(false, true);
 
-    versionLabel.setText("v1.23.1", juce::dontSendNotification);
+    versionLabel.setText("v1.24.0", juce::dontSendNotification);
     versionLabel.setJustificationType(juce::Justification::centred);
     versionLabel.setColour(juce::Label::textColourId, knobIndicatorColour);
     versionLabel.setFont(juce::Font(juce::FontOptions(8.5f,
@@ -3267,7 +3272,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
 
     // Wide Chorus / Doubler left column, compact Phaser / Flanger right.
     // Sequencer target IDs stay attached to their original parameters.
-    static constexpr std::array<const char*, 24> effectIds
+    static constexpr std::array<const char*, 26> effectIds
     { "chorusRate", "chorusDepth", "chorusPreDelay", "chorusVoices",
       "chorusFeedback", "chorusWidth",
       "phaserRate", "phaserDepth", "phaserStages",
@@ -3275,13 +3280,15 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
       "doublerTightness", "doublerDetune", "doublerSpread",
       "doublerPitchRate", "doublerPitchDepth", "doublerTiming",
       "doublerVoices", "phaserCenter",
-      "flangerPhase", "flangerOffset", "flangerShape", "flangerTone" };
-    static constexpr std::array<const char*, 24> effectCaptions
+      "flangerPhase", "flangerOffset", "flangerShape", "flangerTone",
+      "chorusLfoShape", "phaserLfoShape" };
+    static constexpr std::array<const char*, 26> effectCaptions
     { "RATE", "DEPTH", "PRE DLY", "VOICES", "FEEDBK", "WIDTH",
       "RATE", "DEPTH", "STAGES", "RATE", "DEPTH", "FEEDBK",
       "TIGHT", "DETUNE", "SPREAD", "RATE", "DEPTH", "TIMING",
-      "VOICES", "FREQ", "PHASE", "OFFSET", "SHAPE", "TONE" };
-    static constexpr std::array<const char*, 24> effectHelp
+      "VOICES", "FREQ", "PHASE", "OFFSET", "WAVE", "TONE",
+      "WAVE", "WAVE" };
+    static constexpr std::array<const char*, 26> effectHelp
     { "Chorus modulation rate, 0.01 to 10 Hz.",
       "Chorus delay-time sweep depth, 0 to 24 ms.",
       "Chorus pre-delay: minimum base delay before the sweep, 0 to 50 ms.",
@@ -3302,8 +3309,10 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
       "Phaser centre frequency, 75 Hz-7.5 kHz. Depth controls its sweep.",
       "Flanger L/R LFO phase offset, 0-180 deg. Default: 90 deg.",
       "Flanger base delay, 0-12 ms. Higher offsets lower the comb notches.",
-      "Flanger sweep: sine, triangle, then rounded-square motion.",
-      "Flanger tone: 0% deep low-pass to 100% unfiltered." };
+      "Flanger LFO wave: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Rnd Sq.",
+      "Flanger tone: 0% deep low-pass to 100% unfiltered.",
+      "Chorus LFO wave: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Rnd Sq.",
+      "Phaser LFO: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Rnd Sq." };
     static_assert(std::tuple_size<decltype(effectDials)>::value == effectIds.size(),
         "Effect dial array must match parameter IDs");
     static_assert(effectCaptions.size() == effectIds.size());
@@ -3316,7 +3325,10 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
         effectDials[i]->slider.setTextBoxStyle(
             juce::Slider::TextBoxBelow, false, 54, 16);
     }
-    // All six Phaser knobs remain visible at their original size.
+    // Chorus LFO selection uses the same full-size knob as the other FX.
+    // Its eight text values fit the standard 54 px readout without shrinking.
+    // RATE continues to provide the 0.01 to 10 Hz LFO speed control.
+    // All seven Phaser knobs remain visible at their original size.
     static constexpr std::array<const char*, 2> phaserExtraIds
         { "phaserFeedback", "phaserStereo" };
     static constexpr std::array<const char*, 2> phaserExtraLabels
@@ -4025,9 +4037,11 @@ void VortexAudioProcessorEditor::updateEffectBypassAppearance()
     };
     for (int i = 0; i < 6; ++i)
         setDialAppearance(effectDials[static_cast<size_t>(i)], effectPanelEnabled[0]);
+    setDialAppearance(effectDials[24], effectPanelEnabled[0]);
     for (int i = 6; i < 9; ++i)
         setDialAppearance(effectDials[static_cast<size_t>(i)], effectPanelEnabled[1]);
     setDialAppearance(effectDials[19], effectPanelEnabled[1]);
+    setDialAppearance(effectDials[25], effectPanelEnabled[1]);
     for (auto* dial : phaserDetailDials)
         setDialAppearance(dial, effectPanelEnabled[1]);
     for (int i = 9; i < 12; ++i)
@@ -4095,18 +4109,20 @@ void VortexAudioProcessorEditor::randomiseEffectParameters()
     randomParam("chorusPreDelay", 0.0f, 40.0f);
     randomParam("chorusWidth", 65.0f, 185.0f);
     randomParam("chorusVoices", 1.0f, 8.0f);
+    randomParam("chorusLfoShape", 0.0f, 7.0f);
     randomParam("phaserRate", 0.10f, 2.5f);
     randomParam("phaserDepth", 20.0f, 90.0f);
     randomParam("phaserStages", 0.0f, 5.0f);
     randomParam("phaserCenter", 180.0f, 2400.0f);
     randomParam("phaserFeedback", -65.0f, 80.0f);
     randomParam("phaserStereo", 0.0f, 180.0f);
+    randomParam("phaserLfoShape", 0.0f, 7.0f);
     randomParam("flangerRate", 0.10f, 2.0f);
     randomParam("flangerDepth", 20.0f, 90.0f);
     randomParam("flangerFeedback", -50.0f, 50.0f);
     randomParam("flangerPhase", 0.0f, 180.0f);
     randomParam("flangerOffset", 0.0f, 8.0f);
-    randomParam("flangerShape", 0.0f, 100.0f);
+    randomParam("flangerShape", 0.0f, 7.0f);
     randomParam("flangerTone", 30.0f, 100.0f);
     randomParam("doublerTightness", 30.0f, 95.0f);
     randomParam("doublerDetune", 15.0f, 85.0f);
@@ -5032,7 +5048,7 @@ void VortexAudioProcessorEditor::paint(juce::Graphics& g)
             g.fillEllipse(toBar(display[1]) - 2.5f, y - 2.5f, 5.0f, 5.0f);
         };
         drawSweepGuide(processor.getChorusSweepDisplay(),
-                       effectPanelEnabled[0], 155.0f, 69.5f, 250.0f, 0.0f, 105.0f, 0);
+                       effectPanelEnabled[0], 155.0f, 69.5f, 250.0f, 0.0f, 115.0f, 0);
         auto phaserGuide = processor.getPhaserSweepDisplay();
         if (phaserGuide[2] <= 0.0f) // Before the first audio block
         {
@@ -5103,15 +5119,17 @@ void VortexAudioProcessorEditor::resized()
         dial->label.setFont(juce::Font(juce::FontOptions(
             10.5f, juce::Font::bold)));
     };
-    // Symmetrical 6.5/5.5 px side margins in the 407 px Chorus panel.
-    for (int i = 0; i < 6; ++i)
-        placeEffectDial(effectDials[static_cast<size_t>(i)], 52 + 68 * i, 82);
-    // Phaser: RATE, DEPTH, STAGES, FREQ, FEEDBK, SPREAD.
-    const std::array<Dial*, 6> phaserDials {
+    // All seven Chorus knobs match the Doubler's 58 px equal spacing.
+    // WAVE replaces the Chorus header dropdown; panel stays 82 px high.
+    for (int i = 0; i < 7; ++i)
+        placeEffectDial(effectDials[static_cast<size_t>(i == 6 ? 24 : i)],
+                        47 + 58 * i, 82);
+    // Phaser now matches Flanger: seven full-size knobs in the same row.
+    const std::array<Dial*, 7> phaserDials {
         effectDials[6], effectDials[7], effectDials[8], effectDials[19],
-        phaserDetailDials[0], phaserDetailDials[1] };
+        phaserDetailDials[0], phaserDetailDials[1], effectDials[25] };
     for (size_t i = 0; i < phaserDials.size(); ++i)
-        placeEffectDial(phaserDials[i], 466 + 67 * static_cast<int>(i), 82);
+        placeEffectDial(phaserDials[i], 459 + 58 * static_cast<int>(i), 82);
     // Seven equal-size Flanger knobs, 58 px apart, fully inside 409 px panel.
     const std::array<Dial*, 7> flangerDials {
         effectDials[9], effectDials[10], effectDials[11],

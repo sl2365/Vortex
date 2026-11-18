@@ -52,7 +52,7 @@ struct TargetInfo
     const char* displayName;
 };
 
-inline constexpr std::array<TargetInfo, 44> targets
+inline constexpr std::array<TargetInfo, 46> targets
 {{
     { "mix", "Dry / Wet" },
     { "output", "Output" },
@@ -97,8 +97,10 @@ inline constexpr std::array<TargetInfo, 44> targets
     { "doublerLevel", "Dbl Level" },
     { "flangerPhase", "Fla Phase" },
     { "flangerOffset", "Fla Offset" },
-    { "flangerShape", "Fla Shape" },
-    { "flangerTone", "Fla Tone" }
+    { "flangerShape", "Fla Wave" },
+    { "flangerTone", "Fla Tone" },
+    { "chorusLfoShape", "Cho LFO Shape" },
+    { "phaserLfoShape", "Pha Wave" }
 }};
 
 inline constexpr int mixTargetChoice = 1;
@@ -145,6 +147,8 @@ inline constexpr int flangerPhaseTargetChoice = 41;
 inline constexpr int flangerOffsetTargetChoice = 42;
 inline constexpr int flangerShapeTargetChoice = 43;
 inline constexpr int flangerToneTargetChoice = 44;
+inline constexpr int chorusLfoShapeTargetChoice = 45;
+inline constexpr int phaserLfoShapeTargetChoice = 46;
 
 inline int targetChoiceForParameter(const juce::String& parameterId)
 {

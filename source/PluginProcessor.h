@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "VortexSequencer.h"
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -88,7 +89,7 @@ public:
     }
 
 private:
-    static constexpr int stateSchemaVersion = 2;
+    static constexpr int stateSchemaVersion = 5;
     static constexpr int channelCount = 2;
     static constexpr int maxPhaserStages = 12;
     using LinearSmoother = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>;
@@ -98,6 +99,7 @@ private:
         std::atomic<float>* chorusRate = nullptr;
         std::atomic<float>* chorusDepth = nullptr;
         std::atomic<float>* chorusVoices = nullptr;
+        std::atomic<float>* chorusLfoShape = nullptr;
         std::atomic<float>* chorusFeedback = nullptr;
         std::atomic<float>* chorusPreDelay = nullptr;
         std::atomic<float>* chorusWidth = nullptr;
@@ -116,6 +118,7 @@ private:
         std::atomic<float>* phaserCenter = nullptr;
         std::atomic<float>* phaserFeedback = nullptr;
         std::atomic<float>* phaserStereo = nullptr;
+        std::atomic<float>* phaserLfoShape = nullptr;
         std::atomic<float>* flangerRate = nullptr;
         std::atomic<float>* flangerDepth = nullptr;
         std::atomic<float>* flangerFeedback = nullptr;
@@ -181,9 +184,9 @@ private:
     double currentSampleRate = 44100.0;
     LinearSmoother mixValue, outputGainValue, bypassValue;
     std::array<LinearSmoother, 4> effectLevelValues {};
-    LinearSmoother chorusRateValue, chorusDepthValue, chorusFeedbackValue,
+    LinearSmoother chorusLfoShapeValue, chorusRateValue, chorusDepthValue, chorusFeedbackValue,
         chorusPreDelayValue, chorusWidthValue, phaserRateValue, phaserDepthValue, phaserStagesValue,
-        phaserCenterValue, phaserFeedbackValue, phaserStereoValue,
+        phaserCenterValue, phaserFeedbackValue, phaserStereoValue, phaserLfoShapeValue,
         flangerRateValue, flangerDepthValue, flangerFeedbackValue,
         flangerPhaseValue, flangerOffsetValue, flangerShapeValue,
         flangerToneValue,
@@ -209,6 +212,21 @@ private:
         chorusFeedbackSample {};
     int chorusWriteIndex = 0, flangerWriteIndex = 0, doublerWriteIndex = 0;
     std::array<double, 8> chorusVoicePhases {};
+    std::array<std::uint32_t, 8> chorusRandomSeeds {};
+    std::array<float, 8> chorusRandomCurrent {}, chorusRandomNext {},
+        chorusRandomFuture {};
+    std::array<std::array<float, 8>, channelCount> chorusWaveSmoothed {};
+    // Flanger has its own deterministic Random LFO and smooth delay read heads.
+    std::uint32_t flangerRandomSeed = 0;
+    float flangerRandomCurrent = 0.0f, flangerRandomNext = 0.0f,
+        flangerRandomFuture = 0.0f;
+    std::array<float, channelCount> flangerWaveSmoothed {};
+    // Phaser uses the same smoothed wave choices, with its own random cycle.
+    std::uint32_t phaserRandomSeed = 0;
+    float phaserRandomCurrent = 0.0f, phaserRandomNext = 0.0f,
+        phaserRandomFuture = 0.0f;
+    std::array<float, channelCount> phaserWaveSmoothed {};
+    float chorusWaveSmoothingAlpha = 1.0f;
     double phaserPhase = 0.0, flangerPhase = 0.0;
     // Eight persistent, independent modulation clocks; no voice-count retuning.
     std::array<double, 8> doublerVoicePitchPhases {}, doublerVoiceDriftPhases {},

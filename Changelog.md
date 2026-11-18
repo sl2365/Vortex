@@ -1,5 +1,50 @@
 # Vortex — Changelog
 
+## 1.24.0 — Version milestone — 18 November 2026
+
+- Bump version metadata and display from 1.23.6 to 1.24.0 to mark the expanded Chorus, Phaser and Flanger waveform controls.
+- No DSP, controls, parameter IDs, sequencer, plugin identity, or layout changes from v1.23.6.
+
+## 1.23.6 — Unified WAVE controls — 18 November 2026
+
+- Rename the visible Flanger SHAPE knob, host-facing parameter name and sequencer label to WAVE; preserve the existing `flangerShape` parameter ID and target 43.
+- Add a seventh, identical-size WAVE knob to Phaser, with the same eight choices as Chorus and Flanger. Phaser's original Sine sweep is the default, and the new shapes sweep the actual all-pass filter frequencies.
+- Give Phaser a private deterministic Random LFO, independent left/right phases, and smoothed modulation for stepped shapes. Preserve Chorus, Flanger, Doubler DSP and all four 82px panels.
+- Append Phaser WAVE as sequencer target 46, preserving targets 1-45 and all 16 slots. Bump the pre-release state schema to 5; older prototype presets are not migrated.
+- Static source/layout/waveform checks and ZIP integrity verified; Windows VST3 compilation and DAW audition remain outstanding.
+
+## 1.23.5 — Fix eight-wave Flanger build error — 18 November 2026
+
+- Fix Visual Studio C2665 at `PluginProcessor.cpp:353`: construct the Flanger SHAPE wave-list parameter with `juce::AudioParameterChoice`, not `juce::AudioParameterFloat`.
+- Remove the now-unused `channelPhase` local at the Chorus render loop, eliminating warning C4189.
+- No waveform algorithms, parameter IDs, defaults, sequencer targets, control geometry, state schema or logo logic changed. This is a compile repair only.
+- Source/static and ZIP checks passed; a Windows JUCE VST3 build and DAW validation are still required.
+
+## 1.23.4 — Matching eight-wave Chorus and Flanger LFOs — 18 November 2026
+
+- Add Rounded Square as the eighth choice on the existing Chorus WAVE knob.
+- Replace Flanger SHAPE's 0-100% three-wave blend with the same eight selectable LFO shapes: Sine, Triangle, Saw, Ramp, Exponential, Inverse Exponential, Random, and Rounded Square. Preserve Flanger's original sine at the default and its rounded-square character at the last position.
+- Both choices have 60 ms smoothed transitions. Flanger uses deterministic, smoothly interpolated Random values and an 8 ms waveform smoothing stage to keep delay read-head motion controlled on stepped shapes.
+- Keep Chorus and Flanger control placement, seven full-size knobs per panel, all four 82 px panels, unchanged sequencer targets (43 for Flanger SHAPE and 45 for Chorus WAVE), and existing audio routing. Increase the pre-release state schema to 4 because Flanger SHAPE changes parameter type; no preset compatibility is required.
+- Source integrity, range, and waveform checks completed; Windows VST3 build and DAW audio tests remain unverified.
+
+## 1.23.3 — Seven-knob Chorus layout and custom logo support — 18 November 2026
+
+- Replace the Chorus header LFO dropdown with a seventh full-size WAVE knob, matching Doubler's size and equal 58 px spacing. Preserve all four 82 px panels and existing effect knob fonts; restore Chorus's full-width header sweep guide.
+- Keep the seven DSP LFO shapes, 0.01–10 Hz RATE, voice-count improvements, host automation and sequencer target 45 from v1.23.2. Abbreviate the knob's choice readouts so values fit without shrinking fonts.
+- Prefer an embedded `Resources/logo.png` as the Vortex GUI logo when supplied locally. Fall back to the existing `Resources/logo.svg` if PNG is absent. Keep the logo zoom hotspot and surrounding layout unchanged.
+- No changes to active-effect DSP, sequencer routing, gate, other three effect sections or VST3 identity. The user's custom PNG was not part of the uploaded ZIP, so the image must be present locally before building.
+- Source/static and ZIP tests completed; Windows VST3 compilation and DAW visuals/audio remain unverified.
+
+## 1.23.2 — Chorus LFO shapes and stronger voice differentiation — 18 November 2026
+
+- Add a compact seven-shape Chorus LFO selector (Sine, Triangle, Sawtooth, Ramp, Exponential, Inverse Exponential and Random) to the existing 82 px panel header. The red Chorus sweep guide is shortened; all six effect knobs and all four panel heights are untouched.
+- Retain existing Chorus RATE (0.01–10 Hz) as the LFO speed control, rather than duplicate it.
+- Add host-automatable `chorusLfoShape`, with 60 ms shape morphing, a smoothed transition for discontinuous waveforms and independently evolving deterministic Random waveforms per voice.
+- Increase Chorus voice delay separation from 4 ms to 12 ms and introduce voice-dependent L/R placement so VOICES 1–8 changes ensemble density and stereo character more noticeably. Maintain fade-smoothed voice-count changes.
+- Append `Cho LFO Shape` as sequencer target 45, retaining all 44 existing target assignments and all 16 target slots. Bump preset schema to 3 (pre-release migration not required).
+- No changes to Phaser, Flanger, Doubler audio engines, gate routing or GUI panel sizing. Static checks performed; Windows VST3 compilation and actual audio/visual validation outstanding.
+
 ## 1.23.1 — First-release version and portable data folder — 18 November 2026
 
 - Set the plugin version to `1.23.1` consistently in CMake/JUCE metadata, the GUI, build script and documentation.
@@ -171,6 +216,7 @@
 
 # Vortex — Changelog
 
+
 ## 0.1.5 — Doubler engine overhaul — 16 November 2026
 
 - Replaced the former two-tap Doubler with eight independently modulated voices and actual stereo panning.
@@ -182,6 +228,7 @@
 - Windows/DAW compilation, audibility and click-freedom have not been verified.
 
 # Vortex — Changelog
+
 
 ## 0.1.4 — Chorus Feedback and Pre-Delay — 16 November 2026
 

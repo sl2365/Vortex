@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <cmath>
+#include <cstdint>
 #include <utility>
 
 #if JUCE_WINDOWS
@@ -14,6 +15,7 @@ namespace ParameterIds
 constexpr auto chorusRate = "chorusRate";
 constexpr auto chorusDepth = "chorusDepth";
 constexpr auto chorusVoices = "chorusVoices";
+constexpr auto chorusLfoShape = "chorusLfoShape";
 constexpr auto chorusFeedback = "chorusFeedback";
 constexpr auto chorusPreDelay = "chorusPreDelay";
 constexpr auto chorusWidth = "chorusWidth";
@@ -35,6 +37,7 @@ constexpr auto phaserStages = "phaserStages";
 constexpr auto phaserCenter = "phaserCenter";
 constexpr auto phaserFeedback = "phaserFeedback";
 constexpr auto phaserStereo = "phaserStereo";
+constexpr auto phaserLfoShape = "phaserLfoShape";
 constexpr auto flangerRate = "flangerRate";
 constexpr auto flangerDepth = "flangerDepth";
 constexpr auto flangerFeedback = "flangerFeedback";
@@ -51,6 +54,42 @@ constexpr auto bypass = "bypass";
 }
 
 constexpr float smoothingSeconds = 0.060f;
+
+float nextChorusRandom(std::uint32_t& state) noexcept
+{
+    // Xorshift32: used only at LFO cycle boundaries, never per sample.
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return 2.0f * static_cast<float>(state & 0x00ffffffu)
+        / static_cast<float>(0x00ffffffu) - 1.0f;
+}
+
+float chorusShapeWave(int shape, float phase, int voice,
+                      float randomStart, float randomEnd) noexcept
+{
+    const float twoPi = juce::MathConstants<float>::twoPi;
+    switch (shape)
+    {
+        // Retain the original animated sine colour at the default setting.
+        case 0: return 0.84f * std::sin(twoPi * phase)
+                     + 0.16f * std::sin(twoPi * (2.0f * phase
+                          + 0.07f * static_cast<float>(voice)));
+        case 1: return 1.0f - 4.0f * std::abs(phase - 0.5f); // triangle
+        case 2: return 2.0f * phase - 1.0f;                 // saw
+        case 3: return 1.0f - 2.0f * phase;                 // ramp
+        case 4: return 2.0f * phase * phase * phase - 1.0f;
+        case 5: { const float q = 1.0f - phase;
+                  return 1.0f - 2.0f * q * q * q; }
+        case 6: { // Random: smoothly interpolated independent values.
+            const float eased = phase * phase * (3.0f - 2.0f * phase);
+            return randomStart + (randomEnd - randomStart) * eased;
+        }
+        case 7: // Smoothly rounded square, also used by Flanger.
+            return std::tanh(3.0f * std::sin(twoPi * phase)) / std::tanh(3.0f);
+        default: return 0.0f;
+    }
+}
 
 float chorusFeedbackCoefficient(float percentage) noexcept
 {
@@ -261,6 +300,14 @@ VortexAudioProcessor::createParameterLayout()
         juce::AudioParameterFloatAttributes().withLabel("ms")));
     layout.push_back(std::make_unique<API>(
         juce::ParameterID(ParameterIds::chorusVoices, 1), "Chorus Voices", 1, 8, 4));
+    layout.push_back(std::make_unique<APC>(
+        juce::ParameterID(ParameterIds::chorusLfoShape, 1), "Chorus LFO Shape",
+        juce::StringArray { "Sine", "Tri", "Saw", "Ramp",
+                            "Exp", "Inv Exp", "Random", "Rnd Sq" }, 0));
+    layout.push_back(std::make_unique<APC>(
+        juce::ParameterID(ParameterIds::phaserLfoShape, 1), "Phaser Wave",
+        juce::StringArray { "Sine", "Tri", "Saw", "Ramp",
+                            "Exp", "Inv Exp", "Random", "Rnd Sq" }, 0));
     layout.push_back(std::make_unique<APF>(
         juce::ParameterID(ParameterIds::phaserRate, 1), "Phaser Rate",
         rateRange, 0.45f, juce::AudioParameterFloatAttributes().withLabel("Hz")));
@@ -308,9 +355,10 @@ VortexAudioProcessor::createParameterLayout()
         juce::ParameterID(ParameterIds::flangerOffset, 1), "Flanger Offset",
         juce::NormalisableRange<float>(0.0f, 12.0f, 0.1f), 0.0f,
         flangerOffsetText));
-    layout.push_back(std::make_unique<APF>(
-        juce::ParameterID(ParameterIds::flangerShape, 1), "Flanger Shape",
-        percentRange, 0.0f, percentageAttributes));
+    layout.push_back(std::make_unique<APC>(
+        juce::ParameterID(ParameterIds::flangerShape, 1), "Flanger Wave",
+        juce::StringArray { "Sine", "Tri", "Saw", "Ramp",
+                            "Exp", "Inv Exp", "Random", "Rnd Sq" }, 0));
     layout.push_back(std::make_unique<APF>(
         juce::ParameterID(ParameterIds::flangerTone, 1), "Flanger Tone",
         percentRange, 100.0f, percentageAttributes));
@@ -533,6 +581,7 @@ void VortexAudioProcessor::bindParameterPointers()
     raw.chorusRate = bind(ParameterIds::chorusRate);
     raw.chorusDepth = bind(ParameterIds::chorusDepth);
     raw.chorusVoices = bind(ParameterIds::chorusVoices);
+    raw.chorusLfoShape = bind(ParameterIds::chorusLfoShape);
     raw.chorusFeedback = bind(ParameterIds::chorusFeedback);
     raw.chorusPreDelay = bind(ParameterIds::chorusPreDelay);
     raw.chorusWidth = bind(ParameterIds::chorusWidth);
@@ -552,6 +601,7 @@ void VortexAudioProcessor::bindParameterPointers()
     raw.phaserCenter = bind(ParameterIds::phaserCenter);
     raw.phaserFeedback = bind(ParameterIds::phaserFeedback);
     raw.phaserStereo = bind(ParameterIds::phaserStereo);
+    raw.phaserLfoShape = bind(ParameterIds::phaserLfoShape);
     raw.flangerRate = bind(ParameterIds::flangerRate);
     raw.flangerDepth = bind(ParameterIds::flangerDepth);
     raw.flangerFeedback = bind(ParameterIds::flangerFeedback);
@@ -735,6 +785,26 @@ void VortexAudioProcessor::resetEffectState() noexcept
     chorusWriteIndex = flangerWriteIndex = doublerWriteIndex = 0;
     chorusVoicePhases = { 0.00, 0.25, 0.50, 0.75,
                           0.125, 0.375, 0.625, 0.875 };
+    for (size_t voice = 0; voice < chorusVoicePhases.size(); ++voice)
+    {
+        auto& seed = chorusRandomSeeds[voice];
+        seed = 0x9e3779b9u ^ (0x85ebca6bu * (static_cast<std::uint32_t>(voice) + 1u));
+        chorusRandomCurrent[voice] = nextChorusRandom(seed);
+        chorusRandomNext[voice] = nextChorusRandom(seed);
+        chorusRandomFuture[voice] = nextChorusRandom(seed);
+    }
+    for (auto& channel : chorusWaveSmoothed)
+        channel.fill(0.0f);
+    flangerRandomSeed = 0xa341316cu;
+    flangerRandomCurrent = nextChorusRandom(flangerRandomSeed);
+    flangerRandomNext = nextChorusRandom(flangerRandomSeed);
+    flangerRandomFuture = nextChorusRandom(flangerRandomSeed);
+    flangerWaveSmoothed.fill(0.0f);
+    phaserRandomSeed = 0xc2b2ae35u;
+    phaserRandomCurrent = nextChorusRandom(phaserRandomSeed);
+    phaserRandomNext = nextChorusRandom(phaserRandomSeed);
+    phaserRandomFuture = nextChorusRandom(phaserRandomSeed);
+    phaserWaveSmoothed.fill(0.0f);
     phaserPhase = flangerPhase = 0.0;
     doublerVoicePitchPhases = { 0.08, 0.61, 0.35, 0.87,
                                 0.23, 0.74, 0.47, 0.95 };
@@ -768,6 +838,8 @@ void VortexAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused(samplesPerBlock);
     currentSampleRate = juce::jmax(1.0, sampleRate);
+    chorusWaveSmoothingAlpha = 1.0f - std::exp(
+        -1.0f / static_cast<float>(0.008 * currentSampleRate));
     for (auto& line : chorusDelay)
         line.assign(static_cast<size_t>(juce::jmax(4096,
             juce::roundToInt(currentSampleRate * 0.120))), 0.0f);
@@ -793,6 +865,7 @@ void VortexAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         resetSmoother(effectLevelValues[i],
             juce::jlimit(0.0f, 2.0f, load(raw.effectLevels[i]) * 0.01f));
     resetSmoother(chorusRateValue, load(raw.chorusRate));
+    resetSmoother(chorusLfoShapeValue, load(raw.chorusLfoShape));
     resetSmoother(chorusDepthValue, load(raw.chorusDepth));
     // UI is 0..100%; the DSP coefficient remains below unity at 100%.
     resetSmoother(chorusFeedbackValue,
@@ -805,13 +878,14 @@ void VortexAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     resetSmoother(phaserCenterValue, load(raw.phaserCenter));
     resetSmoother(phaserFeedbackValue, load(raw.phaserFeedback) * 0.01f);
     resetSmoother(phaserStereoValue, load(raw.phaserStereo));
+    resetSmoother(phaserLfoShapeValue, load(raw.phaserLfoShape));
     resetSmoother(flangerRateValue, load(raw.flangerRate));
     resetSmoother(flangerDepthValue, load(raw.flangerDepth) * 0.01f);
     resetSmoother(flangerFeedbackValue,
                   flangerFeedbackCoefficient(load(raw.flangerFeedback)));
     resetSmoother(flangerPhaseValue, load(raw.flangerPhase));
     resetSmoother(flangerOffsetValue, load(raw.flangerOffset));
-    resetSmoother(flangerShapeValue, load(raw.flangerShape) * 0.01f);
+    resetSmoother(flangerShapeValue, load(raw.flangerShape));
     resetSmoother(flangerToneValue, load(raw.flangerTone) * 0.01f);
     resetSmoother(doublerTightnessValue, load(raw.doublerTightness) * 0.01f);
     resetSmoother(doublerDetuneValue, load(raw.doublerDetune) * 0.01f);
@@ -828,7 +902,7 @@ void VortexAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     const int initialVoices = juce::jlimit(1, 8, juce::roundToInt(load(raw.chorusVoices)));
     for (int v = 0; v < 8; ++v)
         resetSmoother(chorusVoiceGain[static_cast<size_t>(v)],
-            v < initialVoices ? 1.0f / std::sqrt(static_cast<float>(initialVoices))
+            v < initialVoices ? 1.0f / std::pow(static_cast<float>(initialVoices), 0.65f)
                               : 0.0f);
     const std::array<const std::atomic<float>*, 4> enabledValues {
         raw.chorusEnabled, raw.phaserEnabled, raw.flangerEnabled, raw.doublerEnabled };
@@ -1001,6 +1075,8 @@ void VortexAudioProcessor::processBlock(
     };
     chorusRateValue.setTargetValue(juce::jlimit(0.01f, 10.0f,
         sequenced(vortex::sequencer::chorusRateTargetChoice, raw.chorusRate)));
+    chorusLfoShapeValue.setTargetValue(juce::jlimit(0.0f, 7.0f,
+        sequenced(vortex::sequencer::chorusLfoShapeTargetChoice, raw.chorusLfoShape)));
     chorusDepthValue.setTargetValue(juce::jlimit(0.0f, 24.0f,
         sequenced(vortex::sequencer::chorusDepthTargetChoice, raw.chorusDepth)));
     const int chorusVoices = juce::jlimit(1, 8, juce::roundToInt(
@@ -1016,7 +1092,7 @@ void VortexAudioProcessor::processBlock(
             raw.chorusWidth) * 0.01f));
     for (int v = 0; v < 8; ++v)
         chorusVoiceGain[static_cast<size_t>(v)].setTargetValue(
-            v < chorusVoices ? 1.0f / std::sqrt(static_cast<float>(chorusVoices))
+            v < chorusVoices ? 1.0f / std::pow(static_cast<float>(chorusVoices), 0.65f)
                              : 0.0f);
     phaserRateValue.setTargetValue(sequenced(
         vortex::sequencer::phaserRateTargetChoice, raw.phaserRate));
@@ -1032,6 +1108,9 @@ void VortexAudioProcessor::processBlock(
             raw.phaserFeedback) * 0.01f));
     phaserStereoValue.setTargetValue(juce::jlimit(0.0f, 180.0f,
         sequenced(vortex::sequencer::phaserStereoTargetChoice, raw.phaserStereo)));
+    phaserLfoShapeValue.setTargetValue(juce::jlimit(0.0f, 7.0f,
+        sequenced(vortex::sequencer::phaserLfoShapeTargetChoice,
+            raw.phaserLfoShape)));
     flangerRateValue.setTargetValue(sequenced(
         vortex::sequencer::flangerRateTargetChoice, raw.flangerRate));
     flangerDepthValue.setTargetValue(juce::jlimit(0.0f, 1.0f,
@@ -1044,9 +1123,9 @@ void VortexAudioProcessor::processBlock(
         sequenced(vortex::sequencer::flangerPhaseTargetChoice, raw.flangerPhase)));
     flangerOffsetValue.setTargetValue(juce::jlimit(0.0f, 12.0f,
         sequenced(vortex::sequencer::flangerOffsetTargetChoice, raw.flangerOffset)));
-    flangerShapeValue.setTargetValue(juce::jlimit(0.0f, 1.0f,
+    flangerShapeValue.setTargetValue(juce::jlimit(0.0f, 7.0f,
         sequenced(vortex::sequencer::flangerShapeTargetChoice,
-            raw.flangerShape) * 0.01f));
+            raw.flangerShape)));
     flangerToneValue.setTargetValue(juce::jlimit(0.0f, 1.0f,
         sequenced(vortex::sequencer::flangerToneTargetChoice,
             raw.flangerTone) * 0.01f));
@@ -1169,6 +1248,7 @@ void VortexAudioProcessor::processBlock(
         const float effectInputR = dryR;
         // Every continuously variable control moves at sample rate, not once per block.
         const float chorusRate = chorusRateValue.getNextValue();
+        const float chorusLfoShape = chorusLfoShapeValue.getNextValue();
         const float chorusDepth = chorusDepthValue.getNextValue();
         const float chorusFeedback = chorusFeedbackValue.getNextValue();
         const float chorusPreDelay = chorusPreDelayValue.getNextValue();
@@ -1179,6 +1259,7 @@ void VortexAudioProcessor::processBlock(
         const float phaserCenter = phaserCenterValue.getNextValue();
         const float phaserFeedback = phaserFeedbackValue.getNextValue();
         const float phaserStereo = phaserStereoValue.getNextValue();
+        const float phaserLfoShape = phaserLfoShapeValue.getNextValue();
         // Keep the existing enable fades sample-accurate. The expensive DSP
         // stops only once a voice has become fully inaudible; it remains live
         // throughout the fade so switching effects does not click.
@@ -1259,7 +1340,7 @@ void VortexAudioProcessor::processBlock(
                 chorusVoiceGainSum += voiceGains[voice];
                 if (voiceGains[voice] > 0.000001f)
                     farthestChorusVoiceOffsetMs = 0.15f
-                        + 4.0f * static_cast<float>(voice) / 7.0f;
+                        + 12.0f * static_cast<float>(voice) / 7.0f;
             }
             finalChorusMinimumMs = chorusPreDelay + 0.15f;
             finalChorusMaximumMs = chorusPreDelay
@@ -1313,7 +1394,6 @@ void VortexAudioProcessor::processBlock(
         {
             const auto c = static_cast<size_t>(channel);
             const float input = channel == 0 ? effectInputL : effectInputR;
-            const float channelPhase = channel == 0 ? 0.0f : 0.25f;
             // Stable phase positions: changing voice count crossfades voices,
             // rather than instantly retuning every previously active voice.
             auto& chorusLine = chorusDelay[c];
@@ -1332,25 +1412,52 @@ void VortexAudioProcessor::processBlock(
                     if (gain <= 0.0000001f) continue;
                     const float stereoPhase = channel == 0 ? 0.0f
                         : 0.26f + 0.018f * static_cast<float>(voice);
-                    const float phase = static_cast<float>(chorusVoicePhases[
-                        static_cast<size_t>(voice)]) + stereoPhase;
-                    const float wave = 0.84f * std::sin(
-                        juce::MathConstants<float>::twoPi * phase)
-                        + 0.16f * std::sin(
-                            juce::MathConstants<float>::twoPi * (2.0f * phase
-                                + 0.07f * static_cast<float>(voice)));
-                    // A positive unmodulated pre-delay plus a swept delay of
-                    // 0..2*Depth. The tiny minimum and static voice offsets keep
-                    // every tap safely behind the write head, even at 0 ms.
+                    const float phaseUnwrapped = static_cast<float>(
+                        chorusVoicePhases[static_cast<size_t>(voice)]) + stereoPhase;
+                    const bool wrapsIntoNextCycle = phaseUnwrapped >= 1.0f;
+                    const float phase = phaseUnwrapped
+                        - (wrapsIntoNextCycle ? 1.0f : 0.0f);
+                    const size_t v = static_cast<size_t>(voice);
+                    const float randomStart = wrapsIntoNextCycle
+                        ? chorusRandomNext[v] : chorusRandomCurrent[v];
+                    const float randomEnd = wrapsIntoNextCycle
+                        ? chorusRandomFuture[v] : chorusRandomNext[v];
+                    const int firstShape = juce::jlimit(0, 7,
+                        static_cast<int>(chorusLfoShape));
+                    const int nextShape = juce::jmin(7, firstShape + 1);
+                    const float shapeBlend = chorusLfoShape
+                        - static_cast<float>(firstShape);
+                    const float firstWave = chorusShapeWave(firstShape, phase,
+                        voice, randomStart, randomEnd);
+                    const float secondWave = chorusShapeWave(nextShape, phase,
+                        voice, randomStart, randomEnd);
+                    const float requestedWave = firstWave
+                        + shapeBlend * (secondWave - firstWave);
+                    // Curved and discontinuous LFO choices must not jump the
+                    // fractional delay reader abruptly at the waveform wrap.
+                    // The default sine remains unfiltered as in v1.23.1.
+                    auto& waveState = chorusWaveSmoothed[c][v];
+                    const float smoothingAlpha = chorusLfoShape < 0.0001f
+                        ? 1.0f : chorusWaveSmoothingAlpha;
+                    waveState += smoothingAlpha * (requestedWave - waveState);
                     const float tapOffsetMs = 0.15f
-                        + 4.0f * static_cast<float>(voice) / 7.0f;
+                        + 12.0f * static_cast<float>(voice) / 7.0f;
                     const float delayMs = tapOffsetMs + chorusPreDelay
-                        + chorusDepth * (1.0f + wave);
+                        + chorusDepth * (1.0f + waveState);
                     if (voice == 0) finalChorusMs[c] = delayMs;
                     const float tap = readDelay(
                         chorusLine, chorusWriteIndex,
                         delayMs * static_cast<float>(currentSampleRate * 0.001));
-                    chorusWet += gain * tap;
+                    // New voices occupy progressively different delays and
+                    // stereo positions; the VOICES knob now changes width and
+                    // ensemble density, not only the tap count.
+                    constexpr std::array<float, 8> voicePan {
+                        0.0f, -0.9f, 0.9f, -0.5f,
+                        0.5f, -1.0f, 1.0f, 0.0f };
+                    const float stereoWeight = activeChannels == 2
+                        ? 1.0f + (channel == 0 ? -0.40f : 0.40f) * voicePan[v]
+                        : 1.0f;
+                    chorusWet += gain * stereoWeight * tap;
                     if (voice == 0)
                         chorusPrimaryTap = tap;
                 }
@@ -1377,9 +1484,35 @@ void VortexAudioProcessor::processBlock(
                 // Spread offsets the R-channel LFO from 0 to 180 degrees.
                 const float stereoOffset = channel == 0 ? 0.0f
                     : phaserStereo / 360.0f;
-                const float phaserWave = std::sin(
-                    juce::MathConstants<float>::twoPi *
-                    (static_cast<float>(phaserPhase) + stereoOffset));
+                const float phaseUnwrapped = static_cast<float>(phaserPhase)
+                    + stereoOffset;
+                const bool wrapsIntoNextCycle = phaseUnwrapped >= 1.0f;
+                const float phase = phaseUnwrapped
+                    - (wrapsIntoNextCycle ? 1.0f : 0.0f);
+                const float randomStart = wrapsIntoNextCycle
+                    ? phaserRandomNext : phaserRandomCurrent;
+                const float randomEnd = wrapsIntoNextCycle
+                    ? phaserRandomFuture : phaserRandomNext;
+                const int firstShape = juce::jlimit(0, 7,
+                    static_cast<int>(phaserLfoShape));
+                const int nextShape = juce::jmin(7, firstShape + 1);
+                const float blend = phaserLfoShape - static_cast<float>(firstShape);
+                const auto waveAt = [&](int shape)
+                {
+                    // Preserve the exact original Phaser sine at WAVE=0.
+                    if (shape == 0)
+                        return std::sin(juce::MathConstants<float>::twoPi * phase);
+                    return chorusShapeWave(shape, phase, 0, randomStart, randomEnd);
+                };
+                const float requestedWave = juce::jmap(blend,
+                    waveAt(firstShape), waveAt(nextShape));
+                // Smooth steep/switching waveforms before moving the all-pass
+                // frequencies; the default sine remains unfiltered.
+                auto& waveState = phaserWaveSmoothed[c];
+                const float alpha = phaserLfoShape < 0.0001f
+                    ? 1.0f : chorusWaveSmoothingAlpha;
+                waveState += alpha * (requestedWave - waveState);
+                const float phaserWave = waveState;
                 const float maxFrequency = juce::jmin(12000.0f,
                     static_cast<float>(currentSampleRate * 0.40));
                 const float phaserFrequency = juce::jlimit(25.0f,
@@ -1432,22 +1565,38 @@ void VortexAudioProcessor::processBlock(
                 // oscillator; 90 degrees reproduces the original stereo sweep.
                 const float stereoPhase = channel == 0 ? 0.0f
                     : flangerStereoPhase / 360.0f;
-                const float phase = static_cast<float>(flangerPhase) + stereoPhase;
-                const float sineWave = 0.5f + 0.5f * std::sin(
-                    juce::MathConstants<float>::twoPi * phase);
-                const float trianglePosition = phase + 0.25f
-                    - std::floor(phase + 0.25f);
-                const float triangleWave = 1.0f
-                    - 2.0f * std::abs(trianglePosition - 0.5f);
-                // Sine -> triangle -> smoothly rounded square. The last half
-                // gives a genuinely different sweep, without delay-head jumps.
-                const float roundedSquare = 0.5f + 0.5f * std::tanh(
-                    3.0f * std::sin(juce::MathConstants<float>::twoPi * phase))
-                    / std::tanh(3.0f);
-                const float flangerWave = flangerShape < 0.5f
-                    ? juce::jmap(flangerShape * 2.0f, sineWave, triangleWave)
-                    : juce::jmap((flangerShape - 0.5f) * 2.0f,
-                        triangleWave, roundedSquare);
+                const float phaseUnwrapped = static_cast<float>(flangerPhase)
+                    + stereoPhase;
+                const bool wrapsIntoNextCycle = phaseUnwrapped >= 1.0f;
+                const float phase = phaseUnwrapped
+                    - (wrapsIntoNextCycle ? 1.0f : 0.0f);
+                const float randomStart = wrapsIntoNextCycle
+                    ? flangerRandomNext : flangerRandomCurrent;
+                const float randomEnd = wrapsIntoNextCycle
+                    ? flangerRandomFuture : flangerRandomNext;
+                const int firstShape = juce::jlimit(0, 7,
+                    static_cast<int>(flangerShape));
+                const int nextShape = juce::jmin(7, firstShape + 1);
+                const float shapeBlend = flangerShape
+                    - static_cast<float>(firstShape);
+                const auto getFlangerWave = [&](int shape)
+                {
+                    // The original Flanger sine is retained at WAVE=0.
+                    if (shape == 0)
+                        return std::sin(juce::MathConstants<float>::twoPi * phase);
+                    return chorusShapeWave(shape, phase, 0, randomStart, randomEnd);
+                };
+                const float firstWave = getFlangerWave(firstShape);
+                const float secondWave = getFlangerWave(nextShape);
+                const float requestedWave = firstWave
+                    + shapeBlend * (secondWave - firstWave);
+                // Smooth discontinuous waveforms and parameter transitions
+                // before converting the LFO into a fractional delay position.
+                const float smoothingAlpha = flangerShape < 0.0001f
+                    ? 1.0f : chorusWaveSmoothingAlpha;
+                auto& waveState = flangerWaveSmoothed[c];
+                waveState += smoothingAlpha * (requestedWave - waveState);
+                const float flangerWave = 0.5f + 0.5f * waveState;
                 const float flangeMs = 0.4f + flangerOffset
                     + 5.0f * flangerDepth * flangerWave;
                 finalFlangerMs[c] = flangeMs;
@@ -1641,11 +1790,38 @@ void VortexAudioProcessor::processBlock(
             0.86f, 1.09f, 0.93f, 1.19f, 0.78f, 1.27f, 1.03f, 1.39f };
         if (runChorus)
             for (size_t v = 0; v < chorusVoicePhases.size(); ++v)
+            {
+                const double previous = chorusVoicePhases[v];
                 advancePhase(chorusVoicePhases[v], chorusRate * chorusSpeedRatios[v]);
+                if (chorusVoicePhases[v] < previous)
+                {
+                    chorusRandomCurrent[v] = chorusRandomNext[v];
+                    chorusRandomNext[v] = chorusRandomFuture[v];
+                    chorusRandomFuture[v] = nextChorusRandom(chorusRandomSeeds[v]);
+                }
+            }
         if (runPhaser)
+        {
+            const double previous = phaserPhase;
             advancePhase(phaserPhase, phaserRate);
+            if (phaserPhase < previous)
+            {
+                phaserRandomCurrent = phaserRandomNext;
+                phaserRandomNext = phaserRandomFuture;
+                phaserRandomFuture = nextChorusRandom(phaserRandomSeed);
+            }
+        }
         if (runFlanger)
+        {
+            const double previous = flangerPhase;
             advancePhase(flangerPhase, flangerRate);
+            if (flangerPhase < previous)
+            {
+                flangerRandomCurrent = flangerRandomNext;
+                flangerRandomNext = flangerRandomFuture;
+                flangerRandomFuture = nextChorusRandom(flangerRandomSeed);
+            }
+        }
         if (runDoubler)
             for (size_t v = 0; v < doublerVoicePitchPhases.size(); ++v)
             {

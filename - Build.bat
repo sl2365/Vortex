@@ -25,7 +25,7 @@ set "BUNDLE_BINARY=%BUILD_DIR%\Vortex_artefacts\Release\VST3\Vortex.vst3\Content
 set "FINAL_PLUGIN=%DIST_DIR%\Vortex.vst3"
 
 echo.
-echo Vortex 64-bit VST3 - v1.23.1 Build
+echo Vortex 64-bit VST3 - v1.24.0 Build
 echo ======================================
 echo.
 
@@ -44,7 +44,7 @@ if not exist "%JUCE_CMAKE%" goto :missing_juce
 for %%F in (CMakeLists.txt PluginProcessor.cpp PluginProcessor.h PluginEditor.cpp PluginEditor.h VortexSequencer.h) do (
     if not exist "%SOURCE_DIR%\%%F" goto :missing_source
 )
-if not exist "%PROJECT_ROOT%Resources\logo.svg" goto :missing_logo
+if not exist "%PROJECT_ROOT%Resources\logo.png" if not exist "%PROJECT_ROOT%Resources\logo.svg" goto :missing_logo
 echo       PASS
 echo.
 echo [2/4] Configuring Visual Studio Community 2026 x64...
@@ -93,7 +93,7 @@ goto :failed
 echo FAIL: Required source file missing from %SOURCE_DIR%
 goto :failed
 :missing_logo
-echo FAIL: Required logo missing: %PROJECT_ROOT%Resources\logo.svg
+echo FAIL: Required logo missing: Resources\logo.png or Resources\logo.svg
 goto :failed
 :configure_failed
 echo FAIL: Configuration failed.
