@@ -11,98 +11,202 @@
 
 ![Vortex](Resources/Vortex.jpg)
 
-**Version:** 1.24.0 (eight LFO shapes in Chorus, Phaser and Flanger; Windows/DAW build unverified)  
-**Platform:** Windows x64 VST3  
-**Framework:** JUCE 9.0.4  
-**Identity:** `sl23` / `vtx1` / `com.sl23.vortex`
+Vortex is a Windows x64 VST3 modulation effect that combines **Chorus, Phaser, Flanger and Vocal Doubler** in one plug-in. Use an individual effect for traditional modulation, or enable several at once to build layered textures. Each effect has its own controls, on/off switch, live modulation guide and level, while a shared 32-step parameter sequencer offers more elaborate rhythmic movement.
 
-## Concept
+The interface is designed for immediate adjustment: the four effects remain visible together, and the more powerful modulation and gate tools can be opened when needed. Click the Vortex logo for a zoom menu offering **75% to 300%**, in 25% increments. Manual window resizing is also supported; the selected size is saved for later use.
 
-Vortex is a single modulation effect with four independent engines:
+Credits: Many thanks to Artvera for the logo.
 
-- **Chorus:** multi-voice fractional-delay chorus with eight selectable LFO shapes. RATE controls LFO speed; the WAVE knob is the seventh full-size Chorus control, and the live sweep guide retains its original width. VOICES 1–8 now spreads the taps further in time and stereo. Adjust Rate, Depth, Pre-Delay, Voices, Feedback and Width.
-- **Phaser:** enhanced 2–12-pole cascaded all-pass phaser. All seven controls (Rate, Depth, Stages, Centre Frequency, Feedback, Stereo LFO Phase/Spread and WAVE) appear together, with a red inline guide showing the swept frequency range and live left/right positions. Vortex’s global MIX handles dry/wet blending once.
+## Getting started
 
-When an effect is switched off with its amber LED, its knobs, values and labels are dimmed but **remain fully adjustable**. The header guide shows an inactive grey track. You can prepare new settings while that effect is silent and bring it back in using its LED; its normal colours and live guide return immediately. Sequencer targets are retained, but bypassed knobs show their actual parameter positions while being edited, not sequencer-animated positions. Audio routing is unchanged.
+1. Load Vortex as an audio effect on a track in your VST3-compatible Windows DAW.
+2. Switch on **CHORUS**, **PHASER**, **FLANGER** or **DOUBLER** using the amber LED at the top-left of its panel. Switch the other effects off to hear one at a time.
+3. Set the main **MIX** control to around **50%** as a starting point, and use **OUT** to adjust overall output level.
+4. Turn **RATE** and **DEPTH** to explore the modulation. Chorus, Phaser and Flanger also have a **WAVE** knob to choose the movement shape.
+5. Enable additional effects and adjust the four small top-row **LEVEL** knobs to balance them. Open the sequencer when you want programmed changes.
 
-**Inline modulation guides:** Each panel has a red bar beside its heading, with a swept range and two moving indicators. Chorus shows delay tap movement in milliseconds, Phaser the frequency sweep in Hz, Flanger the short delay sweep in milliseconds, and Doubler the ensemble's active timing spread in milliseconds (two dots represent the first two voices). Doubler uses a logarithmic timing display so short doubling delays remain visible. These displays do not affect processing or add parameters.
-- **Flanger:** short modulated fractional delay with feedback. Adjust Rate, Depth, Feedback, stereo LFO Phase (0–180°), base delay Offset (0–12 ms), eight-choice LFO WAVE (Sine, Triangle, Saw, Ramp, Exp, Inv Exp, Random, Rounded Square) and wet/feedback Tone (deep two-pole low-pass to unfiltered).
-- **Doubler:** up to eight independently positioned and detuned delay voices. Adjust Tightness, Detune, Spread, Pitch Depth, Pitch Rate and Timing. This is intended as *naturalistic doubling*, not a formant-preserving professional vocal pitch shifter.
+Each effect is processed in parallel, not in series. The main MIX sets the overall dry/wet balance; individual LEVEL controls adjust only their effect's processed sound.
 
-**Routing:** Motion Map has been completely removed. All independently enabled engines feed a normalised parallel wet bus. Their amber LEDs control participation; the master MIX controls the combined dry/wet balance, and OUT adjusts final gain. Four compact top-row LEVEL knobs (Chorus, Phaser, Doubler, Flanger) independently trim each wet effect from 0% to 200% (100% unity); they are available as sequencer targets and remain editable while an effect is off. Its former space is used by Phaser and Flanger.
+## The four effects
 
-**Gate modes:** OFF does not gate audio; INPUT gates only the dry path while the effects continue to receive signal; EFFECT gates only the combined wet signal; OUTPUT gates the complete dry/wet output. Smooth gate transitions are retained.
+### Chorus
 
-The full 32-step sequencer and gate sequencer from the Dusk v0.1.1 source remain present: host-sync/free-run operation, step envelopes, waveform/direction choices, drag/drop modulation assignment, 16 target slots, independent slot depths, gate options, sequence files and preset navigation. Sequencer targets include Chorus, Doubler and the additional Phaser parameters, plus effect On/Off switches; the 32 steps and all 16 assignable target slots remain.
+Adds moving, layered copies of the original sound. Use it for subtle width, lush ensembles or stronger swirling modulation.
 
-Click the **Vortex logo** for a **Dusk-style dark GUI Zoom popup**, with 75%, 100%, 125%, 150%, 175%, 200%, 225%, 250%, 275% and 300% options. The popup displays percentages only, with the current preset zoom level checked. Both zoom and pixel dimensions remain available in the logo tooltip and resize feedback; manual edge resizing remains supported.
+| Control | What it does |
+|---|---|
+| **RATE** | Sets modulation speed, from 0.01 to 10 Hz. |
+| **DEPTH** | Sets delay-time modulation, from 0 to 24 ms. |
+| **PRE DLY** | Sets the starting delay, from 0 to 50 ms. |
+| **VOICES** | Selects 1 to 8 chorus voices; more voices can produce a denser, wider sound. |
+| **FEEDBK** | Adds regeneration, from 0 to 100%, for more pronounced modulation. |
+| **WIDTH** | Sets stereo width, from 0 to 200%. |
+| **WAVE** | Selects one of eight LFO shapes. |
 
+For a gentle chorus, begin with low Feedback and moderate Rate and Depth. For a bigger ensemble, increase Voices and Width before adding Feedback.
 
-**Custom logo:** The GUI prefers `Resources/logo.png`, embedded in the VST3 during the build. Copy your logo into that folder **before** double-clicking `- Build.bat`. If the PNG is absent, the original `Resources/logo.svg` is used as a fallback; the ZIP cannot include the new PNG because it was not among the uploaded source files. The README image above also expects your `Resources/logo.png`.
+### Phaser
 
-## Build (Windows)
+Creates moving frequency cancellations and peaks. It can produce a subtle sweep or more pronounced resonant movement.
 
-1. Place the extracted `Vortex` folder at `_Projects\Vortex`, directly beside the shared `_Projects\_Tools` folder.
-2. Ensure JUCE is installed at `_Projects\_Tools\JUCE\_9.0.4` and CMake is installed at `_Projects\_Tools\cmake\_4.4.2`.
+| Control | What it does |
+|---|---|
+| **RATE** | Controls the speed of the frequency sweep. |
+| **DEPTH** | Controls how far the sweep travels. |
+| **STAGES** | Selects the phaser's all-pass stages (2 to 12 poles). |
+| **FREQ** | Sets the centre frequency, from 75 Hz to 7.5 kHz. |
+| **FEEDBK** | Adds positive or negative feedback, from -90% to +90%. |
+| **SPREAD** | Sets left/right LFO phase difference, from 0 to 180 degrees. |
+| **WAVE** | Selects one of eight LFO shapes. |
+
+Start with a slow Rate and moderate Depth. Increase Feedback to accentuate the effect, or adjust FREQ to move the sweep into a different frequency region.
+
+### Flanger
+
+Uses a short, changing delay to generate a sweeping comb-filter effect. It can range from mild movement to pronounced metallic resonance.
+
+| Control | What it does |
+|---|---|
+| **RATE** | Controls sweep speed. |
+| **DEPTH** | Controls delay-time sweep depth. |
+| **FEEDBK** | Sets negative or positive feedback, from -100% to +100%. |
+| **PHASE** | Offsets the left/right LFOs, from 0 to 180 degrees. |
+| **OFFSET** | Sets base delay time, from 0 to 12 ms, changing the comb-filter position. |
+| **WAVE** | Selects one of eight LFO shapes. |
+| **TONE** | Ranges from heavily low-pass filtered at 0% to unfiltered at 100%. |
+
+Try changing OFFSET and TONE with Feedback raised to explore different resonances. Very high feedback can be intense, so monitor the output level.
+
+### Doubler
+
+Creates up to eight additional, independently moving voices. It is intended for thickening vocals, synths, guitars and other sounds, rather than precise, formant-preserving pitch correction.
+
+| Control | What it does |
+|---|---|
+| **TIGHT** | Adjusts how closely the simulated doubles follow the source. |
+| **DETUNE** | Introduces independent pitch differences between voices. |
+| **SPREAD** | Separates the voices across the stereo field. |
+| **RATE** | Sets the speed of the pitch movement. |
+| **DEPTH** | Sets the amount of pitch movement. |
+| **TIMING** | Adds delay offsets, from 0 to 800 ms. |
+| **VOICES** | Selects 1 to 8 doubled voices. |
+
+For a natural double, start with several voices, moderate Spread and short Timing. Larger Timing settings can sound like distinct repeats rather than tightly layered performances.
+
+## Waveforms and live modulation guides
+
+Chorus, Phaser and Flanger share eight **WAVE** choices: **Sine, Triangle, Sawtooth, Ramp, Exponential, Inverse Exponential, Random and Rounded Square**. Their individual RATE knobs control how quickly those waveforms move.
+
+Each effect panel also has a red modulation guide next to its heading:
+
+- **Chorus:** Shows the moving delay-time range.
+- **Phaser:** Shows the frequency sweep and its left/right positions.
+- **Flanger:** Shows the short-delay sweep and its left/right positions.
+- **Doubler:** Shows the timing spread of the doubled voices, with two representative moving markers.
+
+The guides reflect the effects' modulation rather than controlling it. When an effect is off, its guide becomes a stationary grey bar.
+
+## Switching and balancing effects
+
+The **amber LED** in each panel switches that effect on or off. When an effect is off, its knobs and readouts are **dimmed but still adjustable**. This lets you prepare a different sound while the effect is silent, then bring it back in for performance.
+
+The four coloured LEVEL labels and their small knobs in the top row set independent wet levels for **CHORUS**, **PHASER**, **DOUBLER** and **FLANGER**. Each runs from **0% to 200%**, with **100%** as unity gain. Use these to balance the effects; use the main MIX for their combined dry/wet blend and OUT for final output level.
+
+The master power button bypasses Vortex's effect processing as a whole. Disabled effects and a fully bypassed plug-in also avoid unnecessary expensive DSP calculations to reduce CPU use.
+
+## Using the 32-step sequencer
+
+Open the expandable sequencer panel to automate Vortex's controls rhythmically. It provides **32 steps**, up to **16 parameter target slots**, adjustable target depths, host sync or free-run timing, direction, step shapes and gate patterns.
+
+1. Switch the sequencer on and choose host sync or a free-running rate.
+2. Draw a pattern by clicking or dragging vertically in the step grid, or choose one of the sequencer's waveform presets.
+3. Drag a supported parameter label's `::` assignment handle into a target slot, or select a target in the slot controls.
+4. Enable the target and set its individual depth to decide how strongly the pattern moves that parameter.
+5. Adjust the step range, direction, attack, release, depth and offset to refine the movement.
+
+The sequencer has its **own pattern waveforms**; these are separate from the Chorus, Phaser and Flanger WAVE knobs. Assigned effects can also be adjusted manually. When an effect is switched off, its knobs display the actual editable values rather than frozen sequencer-animated positions.
+
+### Gate routing
+
+The sequencer's gate section has four routing modes:
+
+| Gate mode | What is gated |
+|---|---|
+| **OFF** | Nothing. The gate pattern has no effect on the sound. |
+| **INPUT** | Only the dry signal; sound feeding the effects continues, so the effect tails can pass through. |
+| **EFFECT** | Only the combined effected (wet) signal. |
+| **OUTPUT** | Both dry and effected signals together. |
+
+Create a gate pattern with open and closed steps, then choose the routing mode that suits the result. The gate has separate short and long step lengths.
+
+## Presets and sequences
+
+The top-row preset area allows you to step through presets, open the preset browser and use **Save** or **Save As**. The browser includes folders and favourites. Vortex preset files use the `.vortexpreset` extension and are kept in the plug-in's portable Presets folder.
+
+To save a sequencer pattern, use **Save Sequence...** in the step-grid menu. Saved `.vortexseq` files appear in the sequencer's **USER** selection list. Sequences are stored separately from complete effect presets.
+
+### Portable data location
+
+Vortex keeps its data in a `Vortex_Data` folder beside the `Vortex.vst3` plug-in:
+
+```text
+Vortex.vst3
+Vortex_Data/
+    Settings/
+    Presets/
+    Sequences/
+```
+
+The folder is created when needed. `Settings` holds interface settings such as zoom; `Presets` contains full plug-in presets; and `Sequences` stores saved step patterns. Keep `Vortex_Data` with the plug-in when transferring a portable installation.
+
+## Interface tips
+
+- **Zoom:** Click the Vortex logo and choose 75%–300% in 25% increments. You can also resize the window manually.
+- **Context help:** Move the pointer over a control to read its short explanation at the bottom of the interface.
+- **Bypassed effects:** Their controls stay editable, although the knobs and guides are dimmed.
+- **MIX / OUT:** MIX balances the original sound against the combined effects; OUT controls the final output level.
+- **Sequencer assignments:** Parameter labels with `::` can be used to assign modulation targets.
+
+---
+
+## Build and development information
+
+### Requirements
+
+- **Platform:** Windows x64, VST3-compatible DAW.
+- **Source framework:** JUCE 9.0.4 and C++17.
+- **Build environment:** Visual Studio Community 2026, Windows SDK and CMake 4.4.2, as expected by the included build script.
+- **Project layout:** `_Projects\Vortex` beside `_Projects\_Tools`.
+- **Shared tools:** `_Projects\_Tools\JUCE\_9.0.4` and `_Projects\_Tools\cmake\_4.4.2`.
+
+### Building from source
+
+1. Place the source files in `_Projects\Vortex` and keep your existing `_Projects\Vortex\Resources` folder intact.
+2. Confirm that `Resources\logo.png` or `Resources\logo.svg` exists. The build embeds `logo.png` if available, otherwise it uses the SVG fallback.
 3. Double-click `_Projects\Vortex\- Build.bat`.
-4. Inspect `Results.log` for any build errors. The script builds a Windows x64 VST3 and copies the result into `dist\Vortex.vst3` if compilation succeeds.
+4. Read `_Projects\Vortex\Results.log` if the build fails. A successful build writes `dist\Vortex.vst3`.
 
-No automatic VST3 installation takes place. The build deliberately does not overwrite Afterglow or Dusk.
+The build script does **not** install the plug-in automatically. The documentation image at the top of this README uses `Resources/Vortex.jpg`, while the plug-in interface embeds `Resources/logo.png` (or the SVG fallback); these are separate files.
 
-## Independent identity / data
+### Technical details
 
-- Plugin ID: `vtx1`
-- Bundle ID: `com.sl23.vortex`
-- State root: `VortexParameters`
-- Preset format: `.vortexpreset`
-- Sequence format: `.vortexseq`
-- Portable user-data tree: `Vortex_Data/Settings`, `Vortex_Data/Presets`, `Vortex_Data/Sequences`, beside the VST3 bundle. The `Vortex_Data` folder is created automatically on first use. No migration from the pre-release `Vortex` data folder is performed.
+| Item | Value |
+|---|---|
+| Current version | **v1.24.0** |
+| Plug-in format | Windows x64 VST3 audio effect |
+| Company | Dead Channel Audio |
+| Manufacturer / plug-in codes | `sl23` / `vtx1` |
+| Bundle identifier | `com.sl23.vortex` |
+| State root | `VortexParameters` |
+| Preset extension | `.vortexpreset` |
+| Sequence extension | `.vortexseq` |
+| Runtime data folder | `Vortex_Data` beside the VST3 |
+| Audio framework | JUCE 9.0.4 |
 
-## Initial release limitations and required verification
+The project was developed from the stripped Dusk/Afterglow interface template. It retains the original 32-step sequencer and 16 assignable target slots, with additional targets for Vortex's effects and waveforms. The effect engines use parallel wet routing, parameter smoothing and per-engine bypass fades. Expensive processing is reduced when effects are fully inactive; this has not been independently CPU-benchmarked.
 
-This source revision was prepared without a Windows / Visual Studio / JUCE build environment. Although the plugin has been tried by the user, the revised source still requires a Windows build and DAW validation. In particular, smoother parameter transitions are implemented, but the reported adjustment artifacts must be retested in a DAW. Phaser and Flanger tuning remains preliminary. Also verify UI/zoom, VST3 ID and state loading, presets, parallel wet-bus level stability, mono/stereo behavior and the preserved sequencer. The doubler's pitch offsets are implemented via slowly drifting delay taps, not formant correction; stronger settings may produce chorus-like movement.
+### Verification and compatibility
 
-The original uploaded Dusk source was left unchanged and serves as the parent template for this first fork.
+The source has undergone static consistency checks, but the **v1.24.0 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
 
-### Controls
-
-- Each effect section has an amber on/off LED; off returns its contribution smoothly to the unprocessed sound.
-- Chorus Rate 0.01–10 Hz, Depth 0–24 ms, Pre-Delay 0–50 ms, Voices 1–8, Feedback 0–100% (stronger curved response, dedicated feedback tap and bounded below-unity regeneration), Width 0–200%.
-- Doubler Pitch Depth 0–250%, Pitch Rate 0–100%, Timing 0–800 ms, plus Tightness, Detune, Spread and Voices 1–8.
-- Control changes are smoothed on the audio thread. Original 32-step sequencer and 16 target slots are preserved. As a pre-release project, this revision does not guarantee compatibility with earlier prototype preset files or automation.
-
-### Chorus and effect routing
-
-The Chorus now uses eight independently drifting delay-tap clocks (with the selected Voices count controlling the active taps) instead of one shared phase sweep. Feedback defaults to zero and uses a dedicated primary tap blended with a smaller normalised multi-voice contribution, so adding Voices no longer weakens regeneration. All enabled engines play together in a normalised parallel wet mix. The four individual amber FX LEDs determine which engines participate; on/off transitions remain smoothed.
-
-All engine knob labels and numeric readouts use fixed and identical sizes. Doubler Pitch Depth and Rate now use fixed-size percentage readouts to match the AIR comparison workflow; these percentages are not a reverse-engineered AIR scale. This pre-release build is not guaranteed preset-compatible with earlier versions.
-
-### Chorus controls
-
-- **Feedback** is unipolar 0–100% (default 0%). Its stronger response curve reaches a bounded 0.985 maximum coefficient. A dedicated primary delay tap supplies most of the regeneration, with a smaller normalised multi-voice component retaining ensemble colour without letting Voices dilute the effect.
-- **Pre-Delay** is a sequencer-assignable 0–50 ms control (default 18 ms). It sets the minimum base delay before the moving voice delays. A positive voice-offset delay ensures the tap never reads ahead of the writer.
-- Seven Chorus controls (including WAVE) share the same knob size, label font and value font as Doubler.
-- Chorus timing adjusts to add Pre-Delay; no additional Chorus sound-shaping was attempted in this iteration.
-
-### Doubler engine
-
-- Eight independent doubling voices selected using the seventh **VOICES** knob in the widened Doubler panel. Voice count remains sequencer assignable.
-- **P DEPTH** 0-250% (Vortex maps 250% to approximately +/-120 cents peak), **P RATE** 0-100% (about 0.10-3.60 Hz internally), **TIMING** 0-800 ms. AIR's percent-to-pitch conversion is not public; these are not AIR-matched DSP units.
-- Voice-specific pitch movement, low-speed drift, variable timing offsets, and stereo panning. Timing and Tightness changes crossfade between taps to avoid Doppler glides.
-- Extended internal delay memory to accommodate long offsets and deep pitch sweeps. At high Timing settings the result can become echo-like rather than a tight vocal double.
-- Test in stereo, with only Doubler enabled and MIX initially at 50%.
-
-### Doubler and panel layout
-
-- Left column: Chorus (seven equal-sized knobs), Doubler (seven equal-sized knobs). Right column: Phaser and Flanger (seven knobs each, with the red frequency guide in the Phaser title line). All four effect panels have equal heights.
-- Doubler P RATE now appears before P DEPTH. The Voices dropdown was replaced by a knob linked to the same 1–8 parameter.
-- Detune creates sustained independent voice pitch offsets of up to approximately +/-36 cents at 100%, instead of only a small delay wobble. Dual crossfaded delay read heads suppress resets; the result remains a creative delay-based effect, not a formant-preserving pitch shifter.
-- To audition Detune: only Doubler ON, MIX 50%, Voices 2 or 8, Pitch Depth 0%, then sweep Detune from 0% to 100%. Test on sustained notes with headphones.
-
-### CPU behaviour in v0.1.22
-
-The four engines stop their expensive modulation/filter/voice calculations once their individual enabled gain has faded to silence. The same applies when the master Vortex bypass has fully faded to dry. Disabled delay engines retain a lightweight ring-buffer input history for fast return to sound without stale delayed material. Phaser and Flanger filter feedback states are cleared once when processing stops. All effect controls remain adjustable while their engines are off; parameter smoothing and sequencer timing remain live. This is a targeted CPU optimisation, not a benchmarked CPU percentage reduction.
-
-### v1.23.4 LFO wave choices
-
-Chorus, Phaser and Flanger WAVE controls all offer Sine, Triangle, Saw, Ramp, Exponential, Inverse Exponential, Random, and Rounded Square. Each engine has its own RATE control for LFO speed.
+Because Vortex has not previously been released, compatibility with older development presets and automation mappings is not guaranteed. There is no migration from the earlier prototype data-folder names.
