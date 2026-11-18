@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Release](https://img.shields.io/github/v/release/sl2365/Vortex?style=for-the-badge-square&logo=github&logoColor=white&color=purple)](https://github.com/sl2365/Vortex/releases/latest/download/Vortex.rar)
+[![Release](https://img.shields.io/github/v/release/sl2365/Vortex?style=for-the-badge-square&logo=github&logoColor=white&color=008B8B)](https://github.com/sl2365/Vortex/releases/latest/download/Vortex.rar)
 [![Release Date](https://img.shields.io/github/release-date/sl2365/Vortex?style=for-the-badge-square&logo=github&logoColor=white&color=yellow)](https://github.com/sl2365/Vortex/releases)
 [![Latest Asset Downloads](https://img.shields.io/github/downloads/sl2365/Vortex/latest/Vortex.rar?style=for-the-badge-square&logo=github&logoColor=white&label=downloads-latest&displayAssetName=false&color=blue)](https://github.com/sl2365/Vortex/releases/latest)
 [![Total Downloads](https://img.shields.io/github/downloads/sl2365/Vortex/total?style=for-the-badge-square&logo=github&logoColor=white&label=downloads-total&color=blue)](https://github.com/sl2365/Vortex/releases)
@@ -11,8 +11,7 @@
 
 ![Vortex](Resources/Vortex.jpg)
 
-
-**Version:** 0.1.21 (Flanger feedback -100% to +100%, stronger low settings and text rendering; Windows/DAW build unverified)  
+**Version:** 1.23.1 (first release candidate; Doubler compile-scope fix; bypass-aware CPU processing; Windows/DAW build unverified)  
 **Platform:** Windows x64 VST3  
 **Framework:** JUCE 9.0.4  
 **Identity:** `sl23` / `vtx1` / `com.sl23.vortex`
@@ -54,7 +53,7 @@ No automatic VST3 installation takes place. The build deliberately does not over
 - State root: `VortexParameters`
 - Preset format: `.vortexpreset`
 - Sequence format: `.vortexseq`
-- Portable user-data tree: `Vortex/Settings`, `Vortex/Presets`, `Vortex/Sequences`, beside the VST3 bundle.
+- Portable user-data tree: `Vortex_Data/Settings`, `Vortex_Data/Presets`, `Vortex_Data/Sequences`, beside the VST3 bundle. The `Vortex_Data` folder is created automatically on first use. No migration from the pre-release `Vortex` data folder is performed.
 
 ## Initial release limitations and required verification
 
@@ -96,3 +95,7 @@ All engine knob labels and numeric readouts use fixed and identical sizes. Doubl
 - Doubler P RATE now appears before P DEPTH. The Voices dropdown was replaced by a knob linked to the same 1–8 parameter.
 - Detune creates sustained independent voice pitch offsets of up to approximately +/-36 cents at 100%, instead of only a small delay wobble. Dual crossfaded delay read heads suppress resets; the result remains a creative delay-based effect, not a formant-preserving pitch shifter.
 - To audition Detune: only Doubler ON, MIX 50%, Voices 2 or 8, Pitch Depth 0%, then sweep Detune from 0% to 100%. Test on sustained notes with headphones.
+
+### CPU behaviour in v0.1.22
+
+The four engines stop their expensive modulation/filter/voice calculations once their individual enabled gain has faded to silence. The same applies when the master Vortex bypass has fully faded to dry. Disabled delay engines retain a lightweight ring-buffer input history for fast return to sound without stale delayed material. Phaser and Flanger filter feedback states are cleared once when processing stops. All effect controls remain adjustable while their engines are off; parameter smoothing and sequencer timing remain live. This is a targeted CPU optimisation, not a benchmarked CPU percentage reduction.

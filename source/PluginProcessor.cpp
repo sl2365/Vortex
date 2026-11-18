@@ -104,18 +104,18 @@ juce::File VortexAudioProcessor::getDataDirectory()
             for (int depth = 0; depth < 6; ++depth)
             {
                 if (folder.hasFileExtension(".vst3"))
-                    return folder.getParentDirectory().getChildFile("Vortex");
+                    return folder.getParentDirectory().getChildFile("Vortex_Data");
                 const auto parent = folder.getParentDirectory();
                 if (parent == folder)
                     break;
                 folder = parent;
             }
-            return moduleFile.getParentDirectory().getChildFile("Vortex");
+            return moduleFile.getParentDirectory().getChildFile("Vortex_Data");
         }
     }
 #endif
     return juce::File::getSpecialLocation(juce::File::currentApplicationFile)
-        .getParentDirectory().getChildFile("Vortex");
+        .getParentDirectory().getChildFile("Vortex_Data");
 }
 
 juce::File VortexAudioProcessor::getSettingsDirectory()
@@ -712,6 +712,8 @@ void VortexAudioProcessor::resetEffectState() noexcept
     for (auto& line : doublerDelay)
         std::fill(line.begin(), line.end(), 0.0f);
     for (auto& state : phaserState) state.fill(0.0f);
+    phaserProcessingLastSample = false;
+    flangerProcessingLastSample = false;
     phaserFeedbackSample.fill(0.0f);
     phaserDisplayHz[0].store(0.0f, std::memory_order_relaxed);
     phaserDisplayHz[1].store(0.0f, std::memory_order_relaxed);
@@ -1136,6 +1138,10 @@ void VortexAudioProcessor::processBlock(
     // knob/sequence modulation; its two filter stages are continuous.
     constexpr float flangerDarkCutoffHz = 160.0f;
     constexpr float flangerBrightCutoffHz = 16000.0f;
+    // Shared by Doubler voice rendering and LFO phase advancement.
+    constexpr std::array<float, 8> voicePitchSpeed {
+        0.86f, 1.09f, 0.93f, 1.17f,
+        0.79f, 1.26f, 1.03f, 1.36f };
     for (int sample = 0; sample < sampleCount; ++sample)
     {
         const float dryL = left[sample];
@@ -1173,11 +1179,44 @@ void VortexAudioProcessor::processBlock(
         const float phaserCenter = phaserCenterValue.getNextValue();
         const float phaserFeedback = phaserFeedbackValue.getNextValue();
         const float phaserStereo = phaserStereoValue.getNextValue();
-        finalPhaserMinimum = juce::jmax(25.0f,
-            phaserCenter * std::exp2(-phaserDepth * 3.0f));
-        finalPhaserMaximum = juce::jmin(
-            juce::jmin(12000.0f, static_cast<float>(currentSampleRate * 0.40)),
-            phaserCenter * std::exp2(phaserDepth * 3.0f));
+        // Keep the existing enable fades sample-accurate. The expensive DSP
+        // stops only once a voice has become fully inaudible; it remains live
+        // throughout the fade so switching effects does not click.
+        std::array<float, 4> effectGains {};
+        for (size_t e = 0; e < effectGains.size(); ++e)
+            effectGains[e] = effectEnabledValues[e].getNextValue();
+        // An entirely bypassed plugin needs no effect DSP either. Keep each
+        // delay ring current so re-engaging the main power switch is seamless.
+        const float bypass = bypassValue.getNextValue();
+        const bool anyEffectAudible = bypass < 1.0f;
+        const bool runChorus  = anyEffectAudible && effectGains[0] > 0.0000001f;
+        const bool runPhaser  = anyEffectAudible && effectGains[1] > 0.0000001f;
+        const bool runFlanger = anyEffectAudible && effectGains[2] > 0.0000001f;
+        const bool runDoubler = anyEffectAudible && effectGains[3] > 0.0000001f;
+        // There are no long phaser tails to retain when it is switched off.
+        // Clearing the small state only once prevents an old sweep reappearing
+        // after re-enabling the effect minutes later.
+        if (! runPhaser && phaserProcessingLastSample)
+        {
+            for (auto& state : phaserState) state.fill(0.0f);
+            phaserFeedbackSample.fill(0.0f);
+        }
+        phaserProcessingLastSample = runPhaser;
+        if (! runFlanger && flangerProcessingLastSample)
+        {
+            flangerFeedbackSample.fill(0.0f);
+            flangerToneState.fill(0.0f);
+            flangerToneSecondState.fill(0.0f);
+        }
+        flangerProcessingLastSample = runFlanger;
+        if (runPhaser)
+        {
+            finalPhaserMinimum = juce::jmax(25.0f,
+                phaserCenter * std::exp2(-phaserDepth * 3.0f));
+            finalPhaserMaximum = juce::jmin(
+                juce::jmin(12000.0f, static_cast<float>(currentSampleRate * 0.40)),
+                phaserCenter * std::exp2(phaserDepth * 3.0f));
+        }
         const float flangerRate = flangerRateValue.getNextValue();
         const float flangerDepth = flangerDepthValue.getNextValue();
         const float flangerFeedback = flangerFeedbackValue.getNextValue();
@@ -1186,13 +1225,18 @@ void VortexAudioProcessor::processBlock(
         const float flangerShape = flangerShapeValue.getNextValue();
         const float flangerTone = flangerToneValue.getNextValue();
         // Calculate once per sample, shared by both channels.
-        const float flangerToneCutoff = flangerDarkCutoffHz * std::pow(
-            flangerBrightCutoffHz / flangerDarkCutoffHz, flangerTone);
-        const float flangerToneAlpha = 1.0f - std::exp(
-            -juce::MathConstants<float>::twoPi * flangerToneCutoff
-                / static_cast<float>(currentSampleRate));
-        const float flangerUnfilteredBlend = juce::jlimit(0.0f, 1.0f,
-            (flangerTone - 0.88f) / 0.12f);
+        float flangerToneAlpha = 0.0f;
+        float flangerUnfilteredBlend = 0.0f;
+        if (runFlanger)
+        {
+            const float flangerToneCutoff = flangerDarkCutoffHz * std::pow(
+                flangerBrightCutoffHz / flangerDarkCutoffHz, flangerTone);
+            flangerToneAlpha = 1.0f - std::exp(
+                -juce::MathConstants<float>::twoPi * flangerToneCutoff
+                    / static_cast<float>(currentSampleRate));
+            flangerUnfilteredBlend = juce::jlimit(0.0f, 1.0f,
+                (flangerTone - 0.88f) / 0.12f);
+        }
         // Tightness/Timing use a tap crossfade below, not a moving read head.
         const float doublerDetune = doublerDetuneValue.getNextValue();
         const float doublerSpread = doublerSpreadValue.getNextValue();
@@ -1205,25 +1249,28 @@ void VortexAudioProcessor::processBlock(
         // Retain a normalised multi-voice contribution for feedback colour,
         // while a dedicated primary tap prevents the regeneration from being
         // averaged away as more Chorus voices are enabled.
-        float chorusVoiceGainSum = 0.0f;
-        float farthestChorusVoiceOffsetMs = 0.15f;
-        for (size_t voice = 0; voice < voiceGains.size(); ++voice)
+        float chorusFeedbackNormaliser = 1.0f;
+        if (runChorus)
         {
-            chorusVoiceGainSum += voiceGains[voice];
-            if (voiceGains[voice] > 0.000001f)
-                farthestChorusVoiceOffsetMs = 0.15f
-                    + 4.0f * static_cast<float>(voice) / 7.0f;
+            float chorusVoiceGainSum = 0.0f;
+            float farthestChorusVoiceOffsetMs = 0.15f;
+            for (size_t voice = 0; voice < voiceGains.size(); ++voice)
+            {
+                chorusVoiceGainSum += voiceGains[voice];
+                if (voiceGains[voice] > 0.000001f)
+                    farthestChorusVoiceOffsetMs = 0.15f
+                        + 4.0f * static_cast<float>(voice) / 7.0f;
+            }
+            finalChorusMinimumMs = chorusPreDelay + 0.15f;
+            finalChorusMaximumMs = chorusPreDelay
+                + farthestChorusVoiceOffsetMs + 2.0f * chorusDepth;
+            chorusFeedbackNormaliser = 1.0f / juce::jmax(1.0f, chorusVoiceGainSum);
         }
-        finalChorusMinimumMs = chorusPreDelay + 0.15f;
-        finalChorusMaximumMs = chorusPreDelay
-            + farthestChorusVoiceOffsetMs + 2.0f * chorusDepth;
-        finalFlangerMinimumMs = 0.4f + flangerOffset;
-        finalFlangerMaximumMs = finalFlangerMinimumMs + 5.0f * flangerDepth;
-        const float chorusFeedbackNormaliser =
-            1.0f / juce::jmax(1.0f, chorusVoiceGainSum);
-        std::array<float, 4> effectGains {};
-        for (size_t e = 0; e < effectGains.size(); ++e)
-            effectGains[e] = effectEnabledValues[e].getNextValue();
+        if (runFlanger)
+        {
+            finalFlangerMinimumMs = 0.4f + flangerOffset;
+            finalFlangerMaximumMs = finalFlangerMinimumMs + 5.0f * flangerDepth;
+        }
 
         std::array<float, channelCount> chorusSamples {};
         std::array<float, channelCount> phaserSamples {};
@@ -1234,21 +1281,34 @@ void VortexAudioProcessor::processBlock(
             doubleVoiceGains[v] = doublerVoiceGain[v].getNextValue();
         // The AIR-style percentage is a *Vortex* scaling, not a claim about
         // AIR's undisclosed mapping: 250% here means ~+/-120 cents peak.
-        const float pitchCents = 120.0f * doublerPitchDepth / 250.0f;
-        const float pitchHz = 0.10f + 3.50f * std::pow(
-            doublerPitchRate * 0.01f, 1.70f);
-        const float pitchRatio = std::exp2(pitchCents / 1200.0f) - 1.0f;
-        const float pitchSweepMs = pitchRatio * 1000.0f /
-            (juce::MathConstants<float>::twoPi * pitchHz);
-        if (doublerBaseFade >= 1.0f
-            && std::abs(targetDoublerBaseMs - doublerBaseToMs) > 0.5f)
+        float pitchHz = 0.0f;
+        float pitchSweepMs = 0.0f;
+        if (runDoubler)
         {
-            doublerBaseFromMs = doublerBaseToMs;
-            doublerBaseToMs = targetDoublerBaseMs;
-            doublerBaseFade = 0.0f;
+            const float pitchCents = 120.0f * doublerPitchDepth / 250.0f;
+            pitchHz = 0.10f + 3.50f * std::pow(
+                doublerPitchRate * 0.01f, 1.70f);
+            const float pitchRatio = std::exp2(pitchCents / 1200.0f) - 1.0f;
+            pitchSweepMs = pitchRatio * 1000.0f /
+                (juce::MathConstants<float>::twoPi * pitchHz);
+            if (doublerBaseFade >= 1.0f
+                && std::abs(targetDoublerBaseMs - doublerBaseToMs) > 0.5f)
+            {
+                doublerBaseFromMs = doublerBaseToMs;
+                doublerBaseToMs = targetDoublerBaseMs;
+                doublerBaseFade = 0.0f;
+            }
+        }
+        else
+        {
+            // Prepare the edited Timing/Tightness while off; don't trigger
+            // an old delay-head crossfade when the engine comes back on.
+            doublerBaseFromMs = doublerBaseToMs = targetDoublerBaseMs;
+            doublerBaseFade = 1.0f;
         }
         const float delayFade = juce::jlimit(0.0f, 1.0f, doublerBaseFade);
-        doublerBaseFade = juce::jmin(1.0f, doublerBaseFade + baseFadeStep);
+        if (runDoubler)
+            doublerBaseFade = juce::jmin(1.0f, doublerBaseFade + baseFadeStep);
         for (int channel = 0; channel < activeChannels; ++channel)
         {
             const auto c = static_cast<size_t>(channel);
@@ -1257,261 +1317,281 @@ void VortexAudioProcessor::processBlock(
             // Stable phase positions: changing voice count crossfades voices,
             // rather than instantly retuning every previously active voice.
             auto& chorusLine = chorusDelay[c];
-            chorusLine[static_cast<size_t>(chorusWriteIndex)] =
-                sanitiseSample(input + chorusFeedback * chorusFeedbackSample[c], 16.0f);
-            float chorusWet = 0.0f;
-            float chorusPrimaryTap = 0.0f;
-            // Independent, gently detuned LFO clocks prevent the voices from
-            // perpetually sweeping together. Each tap also gets its own static
-            // delay offset and gently asymmetrical modulation shape.
-            for (int voice = 0; voice < 8; ++voice)
+            if (runChorus)
             {
-                const float gain = voiceGains[static_cast<size_t>(voice)];
-                if (gain <= 0.0000001f) continue;
-                const float stereoPhase = channel == 0 ? 0.0f
-                    : 0.26f + 0.018f * static_cast<float>(voice);
-                const float phase = static_cast<float>(chorusVoicePhases[
-                    static_cast<size_t>(voice)]) + stereoPhase;
-                const float wave = 0.84f * std::sin(
-                    juce::MathConstants<float>::twoPi * phase)
-                    + 0.16f * std::sin(
-                        juce::MathConstants<float>::twoPi * (2.0f * phase
-                            + 0.07f * static_cast<float>(voice)));
-                // A positive unmodulated pre-delay plus a swept delay of
-                // 0..2*Depth. The tiny minimum and static voice offsets keep
-                // every tap safely behind the write head, even at 0 ms.
-                const float tapOffsetMs = 0.15f
-                    + 4.0f * static_cast<float>(voice) / 7.0f;
-                const float delayMs = tapOffsetMs + chorusPreDelay
-                    + chorusDepth * (1.0f + wave);
-                if (voice == 0) finalChorusMs[c] = delayMs;
-                const float tap = readDelay(
-                    chorusLine, chorusWriteIndex,
-                    delayMs * static_cast<float>(currentSampleRate * 0.001));
-                chorusWet += gain * tap;
-                if (voice == 0)
-                    chorusPrimaryTap = tap;
-            }
-            const float chorusAveragedTap =
-                chorusWet * chorusFeedbackNormaliser;
-            const float chorusFeedbackTap =
-                0.75f * chorusPrimaryTap + 0.25f * chorusAveragedTap;
-            // A bounded feedback sample keeps extreme settings controlled,
-            // while the coefficient itself always remains below unity.
-            chorusFeedbackSample[c] = std::tanh(chorusFeedbackTap);
-            chorusSamples[c] = chorusWet;
-
-            // Wide logarithmic sweep around an independently adjustable centre.
-            // Spread offsets the R-channel LFO from 0 to 180 degrees.
-            const float stereoOffset = channel == 0 ? 0.0f
-                : phaserStereo / 360.0f;
-            const float phaserWave = std::sin(
-                juce::MathConstants<float>::twoPi *
-                (static_cast<float>(phaserPhase) + stereoOffset));
-            const float maxFrequency = juce::jmin(12000.0f,
-                static_cast<float>(currentSampleRate * 0.40));
-            const float phaserFrequency = juce::jlimit(25.0f,
-                maxFrequency, phaserCenter * std::exp2(
-                    phaserDepth * 3.0f * phaserWave));
-            finalPhaserHz[c] = phaserFrequency;
-            // Use separate pole frequencies to spread the notches instead of
-            // stacking coincident all-pass stages. Per-stage state stays live
-            // so stage-count changes can crossfade without discontinuities.
-            float phased = input + phaserFeedback * phaserFeedbackSample[c];
-            std::array<float, 6> stageOutputs {};
-            for (int pair = 0; pair < maxPhaserStages / 2; ++pair)
-            {
-                const float spread = static_cast<float>(pair) - 2.5f;
-                const float poleFrequency = juce::jlimit(25.0f,
-                    maxFrequency, phaserFrequency * std::exp2(0.21f * spread));
-                const float tangent = std::tan(juce::MathConstants<float>::pi
-                    * poleFrequency / static_cast<float>(currentSampleRate));
-                const float coefficient = (tangent - 1.0f) / (tangent + 1.0f);
-                // Each pair shares a coefficient but has independent state.
-                for (int pole = 0; pole < 2; ++pole)
+                chorusLine[static_cast<size_t>(chorusWriteIndex)] =
+                    sanitiseSample(input + chorusFeedback * chorusFeedbackSample[c], 16.0f);
+                float chorusWet = 0.0f;
+                float chorusPrimaryTap = 0.0f;
+                // Independent, gently detuned LFO clocks prevent the voices from
+                // perpetually sweeping together. Each tap also gets its own static
+                // delay offset and gently asymmetrical modulation shape.
+                for (int voice = 0; voice < 8; ++voice)
                 {
-                    auto& state = phaserState[c][
-                        static_cast<size_t>(pair * 2 + pole)];
-                    const float next = coefficient * phased + state;
-                    state = phased - coefficient * next;
-                    phased = next;
+                    const float gain = voiceGains[static_cast<size_t>(voice)];
+                    if (gain <= 0.0000001f) continue;
+                    const float stereoPhase = channel == 0 ? 0.0f
+                        : 0.26f + 0.018f * static_cast<float>(voice);
+                    const float phase = static_cast<float>(chorusVoicePhases[
+                        static_cast<size_t>(voice)]) + stereoPhase;
+                    const float wave = 0.84f * std::sin(
+                        juce::MathConstants<float>::twoPi * phase)
+                        + 0.16f * std::sin(
+                            juce::MathConstants<float>::twoPi * (2.0f * phase
+                                + 0.07f * static_cast<float>(voice)));
+                    // A positive unmodulated pre-delay plus a swept delay of
+                    // 0..2*Depth. The tiny minimum and static voice offsets keep
+                    // every tap safely behind the write head, even at 0 ms.
+                    const float tapOffsetMs = 0.15f
+                        + 4.0f * static_cast<float>(voice) / 7.0f;
+                    const float delayMs = tapOffsetMs + chorusPreDelay
+                        + chorusDepth * (1.0f + wave);
+                    if (voice == 0) finalChorusMs[c] = delayMs;
+                    const float tap = readDelay(
+                        chorusLine, chorusWriteIndex,
+                        delayMs * static_cast<float>(currentSampleRate * 0.001));
+                    chorusWet += gain * tap;
+                    if (voice == 0)
+                        chorusPrimaryTap = tap;
                 }
-                stageOutputs[static_cast<size_t>(pair)] = phased;
+                const float chorusAveragedTap =
+                    chorusWet * chorusFeedbackNormaliser;
+                const float chorusFeedbackTap =
+                    0.75f * chorusPrimaryTap + 0.25f * chorusAveragedTap;
+                // A bounded feedback sample keeps extreme settings controlled,
+                // while the coefficient itself always remains below unity.
+                chorusFeedbackSample[c] = std::tanh(chorusFeedbackTap);
+                chorusSamples[c] = chorusWet;
             }
-            const int lowerStage = juce::jlimit(0, 5,
-                static_cast<int>(phaserStageChoice));
-            const int upperStage = juce::jmin(5, lowerStage + 1);
-            const float selectedPhased = juce::jmap(
-                phaserStageChoice - static_cast<float>(lowerStage),
-                stageOutputs[static_cast<size_t>(lowerStage)],
-                stageOutputs[static_cast<size_t>(upperStage)]);
-            // Bounded feedback and pure all-pass wet output: dry/wet mixing
-            // occurs once in Vortex's common MIX stage, restoring deep notches.
-            phaserFeedbackSample[c] = std::tanh(selectedPhased);
-            phaserSamples[c] = sanitiseSample(selectedPhased, 8.0f);
+            else
+            {
+                // Lightweight ring-buffer input history, no feedback or
+                // multi-voice taps. Fresh audio is ready when switched on.
+                chorusLine[static_cast<size_t>(chorusWriteIndex)] = input;
+                chorusFeedbackSample[c] = 0.0f;
+            }
+
+            if (runPhaser)
+            {
+                // Wide logarithmic sweep around an independently adjustable centre.
+                // Spread offsets the R-channel LFO from 0 to 180 degrees.
+                const float stereoOffset = channel == 0 ? 0.0f
+                    : phaserStereo / 360.0f;
+                const float phaserWave = std::sin(
+                    juce::MathConstants<float>::twoPi *
+                    (static_cast<float>(phaserPhase) + stereoOffset));
+                const float maxFrequency = juce::jmin(12000.0f,
+                    static_cast<float>(currentSampleRate * 0.40));
+                const float phaserFrequency = juce::jlimit(25.0f,
+                    maxFrequency, phaserCenter * std::exp2(
+                        phaserDepth * 3.0f * phaserWave));
+                finalPhaserHz[c] = phaserFrequency;
+                // Use separate pole frequencies to spread the notches instead of
+                // stacking coincident all-pass stages. Per-stage state stays live
+                // so stage-count changes can crossfade without discontinuities.
+                float phased = input + phaserFeedback * phaserFeedbackSample[c];
+                std::array<float, 6> stageOutputs {};
+                for (int pair = 0; pair < maxPhaserStages / 2; ++pair)
+                {
+                    const float spread = static_cast<float>(pair) - 2.5f;
+                    const float poleFrequency = juce::jlimit(25.0f,
+                        maxFrequency, phaserFrequency * std::exp2(0.21f * spread));
+                    const float tangent = std::tan(juce::MathConstants<float>::pi
+                        * poleFrequency / static_cast<float>(currentSampleRate));
+                    const float coefficient = (tangent - 1.0f) / (tangent + 1.0f);
+                    // Each pair shares a coefficient but has independent state.
+                    for (int pole = 0; pole < 2; ++pole)
+                    {
+                        auto& state = phaserState[c][
+                            static_cast<size_t>(pair * 2 + pole)];
+                        const float next = coefficient * phased + state;
+                        state = phased - coefficient * next;
+                        phased = next;
+                    }
+                    stageOutputs[static_cast<size_t>(pair)] = phased;
+                }
+                const int lowerStage = juce::jlimit(0, 5,
+                    static_cast<int>(phaserStageChoice));
+                const int upperStage = juce::jmin(5, lowerStage + 1);
+                const float selectedPhased = juce::jmap(
+                    phaserStageChoice - static_cast<float>(lowerStage),
+                    stageOutputs[static_cast<size_t>(lowerStage)],
+                    stageOutputs[static_cast<size_t>(upperStage)]);
+                // Bounded feedback and pure all-pass wet output: dry/wet mixing
+                // occurs once in Vortex's common MIX stage, restoring deep notches.
+                phaserFeedbackSample[c] = std::tanh(selectedPhased);
+                phaserSamples[c] = sanitiseSample(selectedPhased, 8.0f);
+            }
 
             auto& flangerLine = flangerDelay[c];
-            flangerLine[static_cast<size_t>(flangerWriteIndex)] = sanitiseSample(
-                input + flangerFeedback * flangerFeedbackSample[c], 16.0f);
-            // Left oscillator stays anchored. PHASE rotates only the right
-            // oscillator; 90 degrees reproduces the original stereo sweep.
-            const float stereoPhase = channel == 0 ? 0.0f
-                : flangerStereoPhase / 360.0f;
-            const float phase = static_cast<float>(flangerPhase) + stereoPhase;
-            const float sineWave = 0.5f + 0.5f * std::sin(
-                juce::MathConstants<float>::twoPi * phase);
-            const float trianglePosition = phase + 0.25f
-                - std::floor(phase + 0.25f);
-            const float triangleWave = 1.0f
-                - 2.0f * std::abs(trianglePosition - 0.5f);
-            // Sine -> triangle -> smoothly rounded square. The last half
-            // gives a genuinely different sweep, without delay-head jumps.
-            const float roundedSquare = 0.5f + 0.5f * std::tanh(
-                3.0f * std::sin(juce::MathConstants<float>::twoPi * phase))
-                / std::tanh(3.0f);
-            const float flangerWave = flangerShape < 0.5f
-                ? juce::jmap(flangerShape * 2.0f, sineWave, triangleWave)
-                : juce::jmap((flangerShape - 0.5f) * 2.0f,
-                    triangleWave, roundedSquare);
-            const float flangeMs = 0.4f + flangerOffset
-                + 5.0f * flangerDepth * flangerWave;
-            finalFlangerMs[c] = flangeMs;
-            const float flanged = readDelay(flangerLine, flangerWriteIndex,
-                flangeMs * static_cast<float>(currentSampleRate * 0.001));
-            // Two-pole tone filter: 0% is deeply dark, 100% is unfiltered.
-            // The high end crossfades back to the exact unfiltered tap.
-            flangerToneState[c] += flangerToneAlpha
-                * (flanged - flangerToneState[c]);
-            flangerToneSecondState[c] += flangerToneAlpha
-                * (flangerToneState[c] - flangerToneSecondState[c]);
-            const float colouredWet = juce::jmap(flangerUnfilteredBlend,
-                flangerToneSecondState[c], flanged);
-            flangerFeedbackSample[c] = sanitiseSample(colouredWet, 16.0f);
-            // Master MIX already supplies the dry path: a second dry blend
-            // here masked OFFSET, PHASE, SHAPE and low-feedback changes.
-            flangerSamples[c] = sanitiseSample(colouredWet, 16.0f);
+            if (runFlanger)
+            {
+                flangerLine[static_cast<size_t>(flangerWriteIndex)] = sanitiseSample(
+                    input + flangerFeedback * flangerFeedbackSample[c], 16.0f);
+                // Left oscillator stays anchored. PHASE rotates only the right
+                // oscillator; 90 degrees reproduces the original stereo sweep.
+                const float stereoPhase = channel == 0 ? 0.0f
+                    : flangerStereoPhase / 360.0f;
+                const float phase = static_cast<float>(flangerPhase) + stereoPhase;
+                const float sineWave = 0.5f + 0.5f * std::sin(
+                    juce::MathConstants<float>::twoPi * phase);
+                const float trianglePosition = phase + 0.25f
+                    - std::floor(phase + 0.25f);
+                const float triangleWave = 1.0f
+                    - 2.0f * std::abs(trianglePosition - 0.5f);
+                // Sine -> triangle -> smoothly rounded square. The last half
+                // gives a genuinely different sweep, without delay-head jumps.
+                const float roundedSquare = 0.5f + 0.5f * std::tanh(
+                    3.0f * std::sin(juce::MathConstants<float>::twoPi * phase))
+                    / std::tanh(3.0f);
+                const float flangerWave = flangerShape < 0.5f
+                    ? juce::jmap(flangerShape * 2.0f, sineWave, triangleWave)
+                    : juce::jmap((flangerShape - 0.5f) * 2.0f,
+                        triangleWave, roundedSquare);
+                const float flangeMs = 0.4f + flangerOffset
+                    + 5.0f * flangerDepth * flangerWave;
+                finalFlangerMs[c] = flangeMs;
+                const float flanged = readDelay(flangerLine, flangerWriteIndex,
+                    flangeMs * static_cast<float>(currentSampleRate * 0.001));
+                // Two-pole tone filter: 0% is deeply dark, 100% is unfiltered.
+                // The high end crossfades back to the exact unfiltered tap.
+                flangerToneState[c] += flangerToneAlpha
+                    * (flanged - flangerToneState[c]);
+                flangerToneSecondState[c] += flangerToneAlpha
+                    * (flangerToneState[c] - flangerToneSecondState[c]);
+                const float colouredWet = juce::jmap(flangerUnfilteredBlend,
+                    flangerToneSecondState[c], flanged);
+                flangerFeedbackSample[c] = sanitiseSample(colouredWet, 16.0f);
+                // Master MIX already supplies the dry path: a second dry blend
+                // here masked OFFSET, PHASE, SHAPE and low-feedback changes.
+                flangerSamples[c] = sanitiseSample(colouredWet, 16.0f);
+            }
+            else
+            {
+                flangerLine[static_cast<size_t>(flangerWriteIndex)] = input;
+            }
 
             // Record the input independently for each host channel; voices
             // are rendered below using their own delays and stereo panning.
             doublerDelay[c][static_cast<size_t>(doublerWriteIndex)] = input;
         }
-        // Eight independent pitch/timing voices. Constant delay heads are
-        // crossfaded for timing changes, while slow modulation is intentional.
-        constexpr std::array<float, 8> voicePan {
-            -0.94f, 0.94f, -0.44f, 0.44f,
-            -0.73f, 0.73f, -0.23f, 0.23f };
-        constexpr std::array<float, 8> voicePitchSpeed {
-             0.86f, 1.09f, 0.93f, 1.17f,
-             0.79f, 1.26f, 1.03f, 1.36f };
-        // Detune is a separate, persistent pitch offset for each voice,
-        // not merely more slow delay-time wobble. Opposite-sign pairs
-        // give a recognisable stereo ensemble even with P DEPTH at zero.
-        constexpr std::array<float, 8> voiceDetuneCents {
-            -36.0f, 36.0f, -22.0f, 22.0f,
-            -13.0f, 13.0f, -29.0f, 29.0f };
-        const float maxDelaySamples = static_cast<float>(
-            doublerDelay[0].size() - 3);
-        finalDoublerMinimumMs = 1350.0f;
-        finalDoublerMaximumMs = 0.0f;
-        finalDoublerMs[0] = finalDoublerMs[1] = 0.0f;
-        for (size_t v = 0; v < 8; ++v)
+        if (runDoubler)
         {
-            const float gain = doubleVoiceGains[v];
-            if (gain <= 0.0000001f) continue;
-            const float pitchWave = std::sin(
-                juce::MathConstants<float>::twoPi *
-                static_cast<float>(doublerVoicePitchPhases[v]));
-            const float driftWave = std::sin(
-                juce::MathConstants<float>::twoPi *
-                static_cast<float>(doublerVoiceDriftPhases[v]));
-            // Two 220-ms overlap-add read heads, a half cycle apart, each
-            // run at a slightly different reading speed. The inactive head
-            // wraps only at zero gain, avoiding clicks from head resets.
-            // The first-order cents-to-ratio approximation has <2% error
-            // at the largest +/-36-cent offset and avoids expensive pow()
-            // calls in the per-sample voice loop.
-            const float detunePhase = static_cast<float>(
-                doublerVoiceDetunePhases[v]);
-            const float detunePhaseB = detunePhase < 0.5f
-                ? detunePhase + 0.5f : detunePhase - 0.5f;
-            const float detuneSin = std::sin(
-                juce::MathConstants<float>::pi * detunePhase);
-            const float headAGain = detuneSin * detuneSin;
-            const float headBGain = 1.0f - headAGain;
-            const float detuneSpanSamples = -0.00057762265f
-                * doublerDetune * voiceDetuneCents[v]
-                * static_cast<float>(currentSampleRate * 0.220);
-            const float headAOffset = detuneSpanSamples * (detunePhase - 0.5f);
-            const float headBOffset = detuneSpanSamples * (detunePhaseB - 0.5f);
-            // Base moves automatically away from the write head when deep
-            // pitch sweeps are selected; there is no clipped/cusped LFO.
-            const float sweptMs = pitchSweepMs / voicePitchSpeed[v]
-                * (1.0f + pitchWave);
-            const float voiceOffsetMs = 2.0f + 3.5f * static_cast<float>(v)
-                + 1.3f * static_cast<float>(v % 3);
-            const float wanderingMs = doublerDetune * 1.5f * (1.0f + driftWave);
-            const float fromMs = doublerBaseFromMs + voiceOffsetMs
-                + wanderingMs + sweptMs;
-            const float toMs = doublerBaseToMs + voiceOffsetMs
-                + wanderingMs + sweptMs;
-            // Guide includes both Timing crossfade heads and the moving
-            // pitch/detune read positions; this does not change audio.
-            const float samplesToMs = 1000.0f /
-                static_cast<float>(currentSampleRate);
-            const float readingMs = juce::jmap(delayFade, fromMs, toMs)
-                + (headAGain * headAOffset + headBGain * headBOffset) * samplesToMs;
-            if (v == 0 || v == 1)
-                finalDoublerMs[v] = juce::jmax(0.0f, readingMs);
-            const float headMinimumMs = juce::jmin(headAOffset, headBOffset)
-                * samplesToMs;
-            const float headMaximumMs = juce::jmax(headAOffset, headBOffset)
-                * samplesToMs;
-            finalDoublerMinimumMs = juce::jmin(finalDoublerMinimumMs,
-                juce::jmax(0.0f, juce::jmin(fromMs, toMs) + headMinimumMs));
-            finalDoublerMaximumMs = juce::jmax(finalDoublerMaximumMs,
-                juce::jmin(1350.0f, juce::jmax(fromMs, toMs) + headMaximumMs));
-            const float fromSamples = juce::jlimit(1.0f, maxDelaySamples,
-                fromMs * static_cast<float>(currentSampleRate * 0.001));
-            const float toSamples = juce::jlimit(1.0f, maxDelaySamples,
-                toMs * static_cast<float>(currentSampleRate * 0.001));
-            // Apply the same detune to both sides of the Timing/Tightness
-            // crossfade. Thus either control can move while detuning without
-            // resetting pitch phases or jumping the active delay position.
-            const auto readDetuned = [&](size_t channel, float delaySamples)
+        // Eight independent pitch/timing voices.     Constant delay heads are
+            // crossfaded for timing changes, while slow modulation is intentional.
+            constexpr std::array<float, 8> voicePan {
+                -0.94f, 0.94f, -0.44f, 0.44f,
+                -0.73f, 0.73f, -0.23f, 0.23f };
+            // Detune is a separate, persistent pitch offset for each voice,
+            // not merely more slow delay-time wobble. Opposite-sign pairs
+            // give a recognisable stereo ensemble even with P DEPTH at zero.
+            constexpr std::array<float, 8> voiceDetuneCents {
+                -36.0f, 36.0f, -22.0f, 22.0f,
+                -13.0f, 13.0f, -29.0f, 29.0f };
+            const float maxDelaySamples = static_cast<float>(
+                doublerDelay[0].size() - 3);
+            finalDoublerMinimumMs = 1350.0f;
+            finalDoublerMaximumMs = 0.0f;
+            finalDoublerMs[0] = finalDoublerMs[1] = 0.0f;
+            for (size_t v = 0; v < 8; ++v)
             {
-                const auto& line = doublerDelay[channel];
-                const float tapA = readDelay(line, doublerWriteIndex,
-                    juce::jlimit(1.0f, maxDelaySamples,
-                        delaySamples + headAOffset));
-                const float tapB = readDelay(line, doublerWriteIndex,
-                    juce::jlimit(1.0f, maxDelaySamples,
-                        delaySamples + headBOffset));
-                return headAGain * tapA + headBGain * tapB;
-            };
-            const float leftTap = juce::jmap(delayFade,
-                readDetuned(0, fromSamples), readDetuned(0, toSamples));
-            float doubleVoice = leftTap;
-            if (activeChannels == 2)
-            {
-                const float rightTap = juce::jmap(delayFade,
-                    readDetuned(1, fromSamples), readDetuned(1, toSamples));
-                doubleVoice = 0.5f * (leftTap + rightTap);
-                // At Spread 0 the two channels match. At 100% the pairs
-                // occupy distinct, nearly hard-panned stereo positions.
-                const float pan = doublerSpread * voicePan[v];
-                doublerSamples[0] += gain * std::sqrt(1.0f - pan) * doubleVoice;
-                doublerSamples[1] += gain * std::sqrt(1.0f + pan) * doubleVoice;
+                const float gain = doubleVoiceGains[v];
+                if (gain <= 0.0000001f) continue;
+                const float pitchWave = std::sin(
+                    juce::MathConstants<float>::twoPi *
+                    static_cast<float>(doublerVoicePitchPhases[v]));
+                const float driftWave = std::sin(
+                    juce::MathConstants<float>::twoPi *
+                    static_cast<float>(doublerVoiceDriftPhases[v]));
+                // Two 220-ms overlap-add read heads, a half cycle apart, each
+                // run at a slightly different reading speed. The inactive head
+                // wraps only at zero gain, avoiding clicks from head resets.
+                // The first-order cents-to-ratio approximation has <2% error
+                // at the largest +/-36-cent offset and avoids expensive pow()
+                // calls in the per-sample voice loop.
+                const float detunePhase = static_cast<float>(
+                    doublerVoiceDetunePhases[v]);
+                const float detunePhaseB = detunePhase < 0.5f
+                    ? detunePhase + 0.5f : detunePhase - 0.5f;
+                const float detuneSin = std::sin(
+                    juce::MathConstants<float>::pi * detunePhase);
+                const float headAGain = detuneSin * detuneSin;
+                const float headBGain = 1.0f - headAGain;
+                const float detuneSpanSamples = -0.00057762265f
+                    * doublerDetune * voiceDetuneCents[v]
+                    * static_cast<float>(currentSampleRate * 0.220);
+                const float headAOffset = detuneSpanSamples * (detunePhase - 0.5f);
+                const float headBOffset = detuneSpanSamples * (detunePhaseB - 0.5f);
+                // Base moves automatically away from the write head when deep
+                // pitch sweeps are selected; there is no clipped/cusped LFO.
+                const float sweptMs = pitchSweepMs / voicePitchSpeed[v]
+                    * (1.0f + pitchWave);
+                const float voiceOffsetMs = 2.0f + 3.5f * static_cast<float>(v)
+                    + 1.3f * static_cast<float>(v % 3);
+                const float wanderingMs = doublerDetune * 1.5f * (1.0f + driftWave);
+                const float fromMs = doublerBaseFromMs + voiceOffsetMs
+                    + wanderingMs + sweptMs;
+                const float toMs = doublerBaseToMs + voiceOffsetMs
+                    + wanderingMs + sweptMs;
+                // Guide includes both Timing crossfade heads and the moving
+                // pitch/detune read positions; this does not change audio.
+                const float samplesToMs = 1000.0f /
+                    static_cast<float>(currentSampleRate);
+                const float readingMs = juce::jmap(delayFade, fromMs, toMs)
+                    + (headAGain * headAOffset + headBGain * headBOffset) * samplesToMs;
+                if (v == 0 || v == 1)
+                    finalDoublerMs[v] = juce::jmax(0.0f, readingMs);
+                const float headMinimumMs = juce::jmin(headAOffset, headBOffset)
+                    * samplesToMs;
+                const float headMaximumMs = juce::jmax(headAOffset, headBOffset)
+                    * samplesToMs;
+                finalDoublerMinimumMs = juce::jmin(finalDoublerMinimumMs,
+                    juce::jmax(0.0f, juce::jmin(fromMs, toMs) + headMinimumMs));
+                finalDoublerMaximumMs = juce::jmax(finalDoublerMaximumMs,
+                    juce::jmin(1350.0f, juce::jmax(fromMs, toMs) + headMaximumMs));
+                const float fromSamples = juce::jlimit(1.0f, maxDelaySamples,
+                    fromMs * static_cast<float>(currentSampleRate * 0.001));
+                const float toSamples = juce::jlimit(1.0f, maxDelaySamples,
+                    toMs * static_cast<float>(currentSampleRate * 0.001));
+                // Apply the same detune to both sides of the Timing/Tightness
+                // crossfade. Thus either control can move while detuning without
+                // resetting pitch phases or jumping the active delay position.
+                const auto readDetuned = [&](size_t channel, float delaySamples)
+                {
+                    const auto& line = doublerDelay[channel];
+                    const float tapA = readDelay(line, doublerWriteIndex,
+                        juce::jlimit(1.0f, maxDelaySamples,
+                            delaySamples + headAOffset));
+                    const float tapB = readDelay(line, doublerWriteIndex,
+                        juce::jlimit(1.0f, maxDelaySamples,
+                            delaySamples + headBOffset));
+                    return headAGain * tapA + headBGain * tapB;
+                };
+                const float leftTap = juce::jmap(delayFade,
+                    readDetuned(0, fromSamples), readDetuned(0, toSamples));
+                float doubleVoice = leftTap;
+                if (activeChannels == 2)
+                {
+                    const float rightTap = juce::jmap(delayFade,
+                        readDetuned(1, fromSamples), readDetuned(1, toSamples));
+                    doubleVoice = 0.5f * (leftTap + rightTap);
+                    // At Spread 0 the two channels match. At 100% the pairs
+                    // occupy distinct, nearly hard-panned stereo positions.
+                    const float pan = doublerSpread * voicePan[v];
+                    doublerSamples[0] += gain * std::sqrt(1.0f - pan) * doubleVoice;
+                    doublerSamples[1] += gain * std::sqrt(1.0f + pan) * doubleVoice;
+                }
+                else
+                    doublerSamples[0] += gain * doubleVoice;
             }
-            else
-                doublerSamples[0] += gain * doubleVoice;
+            if (doubleVoiceGains[1] <= 0.0000001f)
+                finalDoublerMs[1] = finalDoublerMs[0];
+            // Boost the completed Doubler wet signal equally for both routing modes.
+            for (auto& channelWet : doublerSamples)
+                channelWet *= doublerWetGain;
         }
-        if (doubleVoiceGains[1] <= 0.0000001f)
-            finalDoublerMs[1] = finalDoublerMs[0];
-        // Boost the completed Doubler wet signal equally for both routing modes.
-        for (auto& channelWet : doublerSamples)
-            channelWet *= doublerWetGain;
         // Stereo width alters the wet sides, without changing dry input level.
-        if (activeChannels == 2)
+        if (runChorus && activeChannels == 2)
         {
             const float mid = 0.5f * (chorusSamples[0] + chorusSamples[1]);
             chorusSamples[0] = mid + chorusWidth * (chorusSamples[0] - mid);
@@ -1559,17 +1639,21 @@ void VortexAudioProcessor::processBlock(
         // Deliberately non-harmonic clock ratios create an evolving ensemble.
         constexpr std::array<float, 8> chorusSpeedRatios {
             0.86f, 1.09f, 0.93f, 1.19f, 0.78f, 1.27f, 1.03f, 1.39f };
-        for (size_t v = 0; v < chorusVoicePhases.size(); ++v)
-            advancePhase(chorusVoicePhases[v], chorusRate * chorusSpeedRatios[v]);
-        advancePhase(phaserPhase, phaserRate);
-        advancePhase(flangerPhase, flangerRate);
-        for (size_t v = 0; v < doublerVoicePitchPhases.size(); ++v)
-        {
-            advancePhase(doublerVoicePitchPhases[v], pitchHz * voicePitchSpeed[v]);
-            advancePhase(doublerVoiceDriftPhases[v],
-                0.11f + 0.037f * static_cast<float>(v));
-            advancePhase(doublerVoiceDetunePhases[v], 1.0f / 0.220f);
-        }
+        if (runChorus)
+            for (size_t v = 0; v < chorusVoicePhases.size(); ++v)
+                advancePhase(chorusVoicePhases[v], chorusRate * chorusSpeedRatios[v]);
+        if (runPhaser)
+            advancePhase(phaserPhase, phaserRate);
+        if (runFlanger)
+            advancePhase(flangerPhase, flangerRate);
+        if (runDoubler)
+            for (size_t v = 0; v < doublerVoicePitchPhases.size(); ++v)
+            {
+                advancePhase(doublerVoicePitchPhases[v], pitchHz * voicePitchSpeed[v]);
+                advancePhase(doublerVoiceDriftPhases[v],
+                    0.11f + 0.037f * static_cast<float>(v));
+                advancePhase(doublerVoiceDetunePhases[v], 1.0f / 0.220f);
+            }
         if (gateMode == 1)
         {
             wetL *= sequencerGateGain;
@@ -1584,7 +1668,6 @@ void VortexAudioProcessor::processBlock(
             processedL *= sequencerGateGain;
             processedR *= sequencerGateGain;
         }
-        const float bypass = bypassValue.getNextValue();
         left[sample] = sanitiseSample(
             processedL + (dryL - processedL) * bypass, 64.0f);
         if (right != nullptr)

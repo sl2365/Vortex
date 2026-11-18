@@ -194,6 +194,8 @@ private:
     std::array<LinearSmoother, 4> effectEnabledValues {};
     std::array<std::vector<float>, channelCount> chorusDelay, flangerDelay, doublerDelay;
     std::array<std::array<float, maxPhaserStages>, channelCount> phaserState {};
+    // Inactive filter states are cleared once after their wet fade reaches zero.
+    bool phaserProcessingLastSample = false, flangerProcessingLastSample = false;
     std::array<std::atomic<float>, channelCount> phaserDisplayHz {};
     std::atomic<float> phaserDisplayMinimumHz { 0.0f };
     std::atomic<float> phaserDisplayMaximumHz { 0.0f };

@@ -3258,8 +3258,8 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     content.addMouseListener(this, true);
     content.setInterceptsMouseClicks(false, true);
 
-    versionLabel.setText("v0.1.21", juce::dontSendNotification);
-    versionLabel.setJustificationType(juce::Justification::centredLeft);
+    versionLabel.setText("v1.23.1", juce::dontSendNotification);
+    versionLabel.setJustificationType(juce::Justification::centred);
     versionLabel.setColour(juce::Label::textColourId, knobIndicatorColour);
     versionLabel.setFont(juce::Font(juce::FontOptions(8.5f,
                                                      juce::Font::bold)));

@@ -1,5 +1,29 @@
 # Vortex — Changelog
 
+## 1.23.1 — First-release version and portable data folder — 18 November 2026
+
+- Set the plugin version to `1.23.1` consistently in CMake/JUCE metadata, the GUI, build script and documentation.
+- Rename the portable runtime data root beside the VST3 from `Vortex` to `Vortex_Data`; Settings, Presets and Sequences stay under this new root.
+- Do not import or migrate pre-release `Vortex` data. The plugin identity (`sl23` / `vtx1` / `com.sl23.vortex`), DSP, GUI, sequencer and audio routing remain unchanged.
+- Source consistency and ZIP integrity checked; Windows compilation and DAW validation pending.
+
+## 0.1.23 — Fix v0.1.22 Windows compilation error — 18 November 2026
+
+- Move the existing eight-voice Doubler `voicePitchSpeed` constant array to a shared scope so both its audio rendering and LFO phase-advance code can reference it.
+- Fix Visual Studio error C2065 at PluginProcessor.cpp line 1651 (and its dependent C2064 error).
+- Retain all v0.1.22 CPU gating behaviour, DSP values, effect controls, GUI alignment, and sequencer without intentional functional changes.
+- Static source checks passed; Windows compilation and DAW tests pending.
+
+## 0.1.22 — Centred version label and bypass-aware CPU processing — 18 November 2026
+
+- Centre the displayed version text horizontally over the existing 30px master bypass/power button; do not move the button or the main layout.
+- Skip Chorus voice reads, Phaser all-pass stages, Flanger wet/filter processing, and Doubler pitch/timing voice reads once the respective effect's smoothed enable gain reaches silence.
+- When the whole plugin is fully bypassed, suspend the same heavy engine processing while still keeping parameter smoothers and sequencer timing current.
+- Keep chorus, flanger and doubler input delay rings updated at low cost while effects are off, so re-enabling does not retrieve stale input. Clear small Phaser and Flanger feedback/filter states once after disabling; retain existing effect-enable fades.
+- Leave DSP calculations for active effects, gate mode routing, sequencer assignments, 82px panels and all effect controls unchanged. During off periods, modulation phases pause and resume on enable; disabled effect tails are not calculated once fully faded out.
+- Source/static/ZIP checks only; Windows compilation and DAW audio/CPU verification pending.
+
+
 ## 0.1.21 — Make Flanger controls audibly effective — 18 November 2026
 
 - Eliminate the Flanger's hidden 50% internal dry blend. The master MIX alone controls dry/wet, so OFFSET, PHASE, SHAPE and FEEDBK have a stronger effect. With a single Flanger enabled, MIX around 50% is the recommended test point.
