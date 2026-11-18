@@ -9,7 +9,7 @@
 
 </div>
 
-![Vortex](Resources/Vortex.png)
+![Vortex](Resources/Vortex.jpg)
 
 **Version:** 1.24.0 (eight LFO shapes in Chorus, Phaser and Flanger; Windows/DAW build unverified)  
 **Platform:** Windows x64 VST3  
