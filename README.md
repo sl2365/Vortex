@@ -9,7 +9,7 @@
 
 </div>
 
-![Vortex](Resources/Vortex-Seq.jpg)
+![Vortex](Resources/Vortex.jpg)
 
 
 **Version:** 0.1.21 (Flanger feedback -100% to +100%, stronger low settings and text rendering; Windows/DAW build unverified)  
