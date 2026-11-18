@@ -85,6 +85,15 @@ private:
         int lastWheelDirection = 0;
     };
 
+    // The bottom contextual-help strip has room for exactly two lines.
+    // Draw each line separately so a long description cannot wrap onto
+    // a third line and get clipped vertically.
+    class TwoLineHelpLabel final : public juce::Label
+    {
+    public:
+        void paint(juce::Graphics&) override;
+    };
+
     class PresetDisplayLabel final : public juce::Label
     {
     public:
@@ -198,7 +207,7 @@ private:
     LookAndFeel zoomMenuLookAndFeel;
     juce::Component content;
     std::vector<std::unique_ptr<Dial>> dials;
-    std::array<Dial*, 20> effectDials {};
+    std::array<Dial*, 24> effectDials {};
     std::array<Dial*, 2> phaserDetailDials {};
     std::array<Dial*, 4> effectLevelDials {};
     std::array<juce::ToggleButton, 4> effectEnabledButtons {};
@@ -236,7 +245,7 @@ private:
     juce::File currentPresetFile;
     juce::File copiedPresetFile;
     juce::StringArray favouritePresetPaths;
-    juce::Label information;
+    TwoLineHelpLabel information;
 
     static constexpr int designWidth = 926;
     static constexpr int collapsedDesignHeight = 276;

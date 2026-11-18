@@ -2532,6 +2532,38 @@ private:
     bool sequencerControlsEnabled = true;
 };
 
+void VortexAudioProcessorEditor::TwoLineHelpLabel::paint(juce::Graphics& g)
+{
+    const auto text = getText();
+    const auto lineBreak = text.indexOfChar('\n');
+    const auto bounds = getLocalBounds().reduced(0, 1);
+
+    g.setFont(getFont());
+    g.setColour(findColour(juce::Label::textColourId)
+        .withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
+
+    // Single-line notifications retain their original centred position.
+    if (lineBreak < 0)
+    {
+        g.drawFittedText(text, bounds, juce::Justification::centredLeft,
+                         1, 0.82f);
+        return;
+    }
+
+    const auto title = text.substring(0, lineBreak);
+    const auto description = text.substring(lineBreak + 1)
+        .replaceCharacter('\n', ' ').replaceCharacter('\r', ' ');
+    auto firstLine = bounds;
+    firstLine.setHeight(bounds.getHeight() / 2);
+    const auto secondLine = bounds.withTrimmedTop(firstLine.getHeight());
+
+    // Both rows are strictly single-line: no third line or vertical crop.
+    g.drawFittedText(title, firstLine, juce::Justification::centredLeft,
+                     1, 0.82f);
+    g.drawFittedText(description, secondLine,
+                     juce::Justification::centredLeft, 1, 0.82f);
+}
+
 void VortexAudioProcessorEditor::PresetDisplayLabel::paint(
     juce::Graphics& g)
 {
@@ -3226,7 +3258,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     content.addMouseListener(this, true);
     content.setInterceptsMouseClicks(false, true);
 
-    versionLabel.setText("v0.1.18", juce::dontSendNotification);
+    versionLabel.setText("v0.1.21", juce::dontSendNotification);
     versionLabel.setJustificationType(juce::Justification::centredLeft);
     versionLabel.setColour(juce::Label::textColourId, knobIndicatorColour);
     versionLabel.setFont(juce::Font(juce::FontOptions(8.5f,
@@ -3254,24 +3286,28 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
       "Chorus delay-time sweep depth, 0 to 24 ms.",
       "Chorus pre-delay: minimum base delay before the sweep, 0 to 50 ms.",
       "Number of independent chorus voices, 1 to 8.",
-      "Unipolar Chorus feedback, 0 to 100%. A dedicated feedback tap keeps regeneration strong at every Voices setting while remaining bounded.",
+      "Chorus feedback, 0-100%. Adds stronger, bounded regeneration.",
       "Stereo width of chorus wet signal, 0 to 200%.",
       "Phaser sweep rate.", "Phaser sweep depth.",
-        "Selectable 2, 4, 6, 8, 10 or 12 all-pass poles, crossfaded when changing.",
+        "Choose 2-12 phaser poles. Changes are crossfaded to prevent clicks.",
       "Flanger sweep rate.", "Flanger delay depth.",
-      "Flanger feedback; negative values reverse feedback polarity.",
+      "Flanger feedback, -100% to +100%; negative reverses polarity.",
       "Tightness moves the base doubling delay (with click-free crossfades).",
-      "Independent +/-36-cent voice detuning at maximum, with smooth grain crossfades.",
+      "Independent voice detuning up to +/-36 cents, with smooth crossfades.",
       "Stereo separation of the eight independently placed doubled voices.",
       "Pitch sweep rate, 0-100%, about 0.1-3.6 Hz internally.",
-      "Pitch sweep intensity, 0-250%. In Vortex, 250% means roughly +/-120 cents.",
+      "Doubler pitch-sweep depth, 0-250% (up to about +/-120 cents).",
       "Extra timing offsets, 0-800 ms; long settings become audible repeats.",
       "Independent Doubler voices, 1 to 8, also available to the sequencer.",
-      "Phaser centre frequency from 75 Hz to 7.5 kHz. Depth sweeps around this setting.",
-      "Flanger stereo LFO phase difference, 0 to 180 degrees. 90 degrees matches the earlier default.",
-      "Flanger base delay offset, 0 to 12 ms. Higher settings move the comb notches lower.",
-      "Flanger LFO shape, 0% sine to 100% triangle. Sweep timing changes continuously.",
-      "Flanger wet and feedback tone, 0% dark to 100% bright (original sound)." };
+      "Phaser centre frequency, 75 Hz-7.5 kHz. Depth controls its sweep.",
+      "Flanger L/R LFO phase offset, 0-180 deg. Default: 90 deg.",
+      "Flanger base delay, 0-12 ms. Higher offsets lower the comb notches.",
+      "Flanger sweep: sine, triangle, then rounded-square motion.",
+      "Flanger tone: 0% deep low-pass to 100% unfiltered." };
+    static_assert(std::tuple_size<decltype(effectDials)>::value == effectIds.size(),
+        "Effect dial array must match parameter IDs");
+    static_assert(effectCaptions.size() == effectIds.size());
+    static_assert(effectHelp.size() == effectIds.size());
     for (size_t i = 0; i < effectDials.size(); ++i)
     {
         effectDials[i] = addDial(effectIds[i], effectCaptions[i], effectHelp[i]);
@@ -3286,8 +3322,8 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     static constexpr std::array<const char*, 2> phaserExtraLabels
         { "FEEDBK", "SPREAD" };
     static constexpr std::array<const char*, 2> phaserExtraHelp
-        { "Phaser feedback from -90% to +90%. Negative values reverse feedback polarity.",
-          "Right-channel LFO phase offset from 0 to 180 degrees. Left stays anchored." };
+        { "Phaser feedback, -90% to +90%. Negative reverses polarity.",
+          "Phaser L/R phase difference, 0-180 deg. The left LFO stays fixed." };
     for (size_t i = 0; i < phaserDetailDials.size(); ++i)
     {
         phaserDetailDials[i] = addDial(
@@ -3331,8 +3367,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     for (size_t i = 0; i < effectLevelDials.size(); ++i)
     {
         const auto description = "Set the " + juce::String(levelNames[i])
-            + " wet effect level from 0% (mute) to 200% (+6 dB). "
-              "100% is unity. The master MIX is unchanged.";
+            + " wet level, 0-200% (100% = unity). Master MIX is unchanged.";
         effectLevelDials[i] = addDial(levelIds[i], levelNames[i],
                                        description.toRawUTF8());
         auto* dial = effectLevelDials[i];
@@ -3568,7 +3603,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     content.addAndMakeVisible(randomButton);
 
     information.setText(
-        "VORTEX 0.1.18 | Chorus · Doubler · Phaser · Flanger\nNew Flanger controls and header refinements.",
+        "VORTEX 0.1.21 | Chorus  |  Doubler  |  Phaser  |  Flanger\nExpanded Flanger modulation and tone response.",
         juce::dontSendNotification);
     information.setColour(juce::Label::textColourId,
                           juce::Colours::lightgrey);
@@ -3858,7 +3893,7 @@ void VortexAudioProcessorEditor::updateZoomTooltip()
 {
     const int percentage = juce::jlimit(75, 300, juce::roundToInt(
         100.0f * static_cast<float>(getWidth()) / designWidth));
-    const juce::String tooltip = "Zoom " + juce::String(percentage) + "% · "
+    const juce::String tooltip = "Zoom " + juce::String(percentage) + "%  |  "
         + juce::String(getWidth()) + " x " + juce::String(getHeight())
         + " px. Click the logo to select a zoom level; drag the window edge for custom sizes.";
     logoHotspot.setTooltip(tooltip);

@@ -59,6 +59,15 @@ float chorusFeedbackCoefficient(float percentage) noexcept
     // stronger rise than the previous linear 0..0.95 mapping.
     return 0.985f * std::pow(normalised, 0.70f);
 }
+
+float flangerFeedbackCoefficient(float percentage) noexcept
+{
+    // The knob is bipolar (-100..+100%), but the loop stays below unity.
+    // A concave taper gives usable regeneration throughout 0..60%.
+    const float amount = juce::jlimit(0.0f, 1.0f,
+        std::abs(percentage) * 0.01f);
+    return std::copysign(0.96f * std::pow(amount, 0.48f), percentage);
+}
 }
 
 VortexAudioProcessor::VortexAudioProcessor()
@@ -269,7 +278,7 @@ VortexAudioProcessor::createParameterLayout()
         percentRange, 65.0f, percentageAttributes));
     layout.push_back(std::make_unique<APF>(
         juce::ParameterID(ParameterIds::flangerFeedback, 1), "Flanger Feedback",
-        juce::NormalisableRange<float>(-85.0f, 85.0f, 0.1f), 25.0f,
+        juce::NormalisableRange<float>(-100.0f, 100.0f, 0.1f), 25.0f,
         percentageAttributes));
     // Extra Flanger sound-design parameters. Defaults preserve the previous
     // sine sweep, 90-degree stereo offset, base delay and unfiltered sound.
@@ -719,6 +728,7 @@ void VortexAudioProcessor::resetEffectState() noexcept
     doublerDisplayMaximumMs.store(0.0f, std::memory_order_relaxed);
     flangerFeedbackSample.fill(0.0f);
     flangerToneState.fill(0.0f);
+    flangerToneSecondState.fill(0.0f);
     chorusFeedbackSample.fill(0.0f);
     chorusWriteIndex = flangerWriteIndex = doublerWriteIndex = 0;
     chorusVoicePhases = { 0.00, 0.25, 0.50, 0.75,
@@ -795,7 +805,8 @@ void VortexAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     resetSmoother(phaserStereoValue, load(raw.phaserStereo));
     resetSmoother(flangerRateValue, load(raw.flangerRate));
     resetSmoother(flangerDepthValue, load(raw.flangerDepth) * 0.01f);
-    resetSmoother(flangerFeedbackValue, load(raw.flangerFeedback) * 0.01f);
+    resetSmoother(flangerFeedbackValue,
+                  flangerFeedbackCoefficient(load(raw.flangerFeedback)));
     resetSmoother(flangerPhaseValue, load(raw.flangerPhase));
     resetSmoother(flangerOffsetValue, load(raw.flangerOffset));
     resetSmoother(flangerShapeValue, load(raw.flangerShape) * 0.01f);
@@ -1024,9 +1035,9 @@ void VortexAudioProcessor::processBlock(
     flangerDepthValue.setTargetValue(juce::jlimit(0.0f, 1.0f,
         sequenced(vortex::sequencer::flangerDepthTargetChoice,
             raw.flangerDepth) * 0.01f));
-    flangerFeedbackValue.setTargetValue(juce::jlimit(-0.85f, 0.85f,
+    flangerFeedbackValue.setTargetValue(flangerFeedbackCoefficient(
         sequenced(vortex::sequencer::flangerFeedbackTargetChoice,
-            raw.flangerFeedback) * 0.01f));
+            raw.flangerFeedback)));
     flangerPhaseValue.setTargetValue(juce::jlimit(0.0f, 180.0f,
         sequenced(vortex::sequencer::flangerPhaseTargetChoice, raw.flangerPhase)));
     flangerOffsetValue.setTargetValue(juce::jlimit(0.0f, 12.0f,
@@ -1121,11 +1132,10 @@ void VortexAudioProcessor::processBlock(
         + doublerTimingValue.getTargetValue();
     const float baseFadeStep = 1.0f / static_cast<float>(
         juce::jmax(1.0, currentSampleRate * 0.060));
-    // One stable low-pass coefficient per block; no per-sample exp() calls.
-    constexpr float flangerToneCutoffHz = 1700.0f;
-    const float flangerToneAlpha = 1.0f - std::exp(
-        -juce::MathConstants<float>::twoPi * flangerToneCutoffHz
-            / static_cast<float>(currentSampleRate));
+    // Broad, logarithmic tone range. Calculated once per sample for smooth
+    // knob/sequence modulation; its two filter stages are continuous.
+    constexpr float flangerDarkCutoffHz = 160.0f;
+    constexpr float flangerBrightCutoffHz = 16000.0f;
     for (int sample = 0; sample < sampleCount; ++sample)
     {
         const float dryL = left[sample];
@@ -1175,6 +1185,14 @@ void VortexAudioProcessor::processBlock(
         const float flangerOffset = flangerOffsetValue.getNextValue();
         const float flangerShape = flangerShapeValue.getNextValue();
         const float flangerTone = flangerToneValue.getNextValue();
+        // Calculate once per sample, shared by both channels.
+        const float flangerToneCutoff = flangerDarkCutoffHz * std::pow(
+            flangerBrightCutoffHz / flangerDarkCutoffHz, flangerTone);
+        const float flangerToneAlpha = 1.0f - std::exp(
+            -juce::MathConstants<float>::twoPi * flangerToneCutoff
+                / static_cast<float>(currentSampleRate));
+        const float flangerUnfilteredBlend = juce::jlimit(0.0f, 1.0f,
+            (flangerTone - 0.88f) / 0.12f);
         // Tightness/Timing use a tap crossfade below, not a moving read head.
         const float doublerDetune = doublerDetuneValue.getNextValue();
         const float doublerSpread = doublerSpreadValue.getNextValue();
@@ -1346,21 +1364,32 @@ void VortexAudioProcessor::processBlock(
                 - std::floor(phase + 0.25f);
             const float triangleWave = 1.0f
                 - 2.0f * std::abs(trianglePosition - 0.5f);
-            const float flangerWave = juce::jmap(flangerShape,
-                sineWave, triangleWave);
+            // Sine -> triangle -> smoothly rounded square. The last half
+            // gives a genuinely different sweep, without delay-head jumps.
+            const float roundedSquare = 0.5f + 0.5f * std::tanh(
+                3.0f * std::sin(juce::MathConstants<float>::twoPi * phase))
+                / std::tanh(3.0f);
+            const float flangerWave = flangerShape < 0.5f
+                ? juce::jmap(flangerShape * 2.0f, sineWave, triangleWave)
+                : juce::jmap((flangerShape - 0.5f) * 2.0f,
+                    triangleWave, roundedSquare);
             const float flangeMs = 0.4f + flangerOffset
                 + 5.0f * flangerDepth * flangerWave;
             finalFlangerMs[c] = flangeMs;
             const float flanged = readDelay(flangerLine, flangerWriteIndex,
                 flangeMs * static_cast<float>(currentSampleRate * 0.001));
-            // TONE blends the original wet tap with a low-pass version.
-            // At 100% bypass the blend to retain the old unfiltered sample.
+            // Two-pole tone filter: 0% is deeply dark, 100% is unfiltered.
+            // The high end crossfades back to the exact unfiltered tap.
             flangerToneState[c] += flangerToneAlpha
                 * (flanged - flangerToneState[c]);
-            const float colouredWet = flangerTone >= 1.0f ? flanged
-                : juce::jmap(flangerTone, flangerToneState[c], flanged);
+            flangerToneSecondState[c] += flangerToneAlpha
+                * (flangerToneState[c] - flangerToneSecondState[c]);
+            const float colouredWet = juce::jmap(flangerUnfilteredBlend,
+                flangerToneSecondState[c], flanged);
             flangerFeedbackSample[c] = sanitiseSample(colouredWet, 16.0f);
-            flangerSamples[c] = 0.5f * (input + colouredWet);
+            // Master MIX already supplies the dry path: a second dry blend
+            // here masked OFFSET, PHASE, SHAPE and low-feedback changes.
+            flangerSamples[c] = sanitiseSample(colouredWet, 16.0f);
 
             // Record the input independently for each host channel; voices
             // are rendered below using their own delays and stereo panning.

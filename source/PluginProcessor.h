@@ -202,7 +202,7 @@ private:
     std::atomic<float> flangerDisplayMinimumMs { 0.0f }, flangerDisplayMaximumMs { 0.0f };
     std::array<std::atomic<float>, 2> doublerDisplayMs {};
     std::atomic<float> doublerDisplayMinimumMs { 0.0f }, doublerDisplayMaximumMs { 0.0f };
-    std::array<float, channelCount> flangerToneState {};
+    std::array<float, channelCount> flangerToneState {}, flangerToneSecondState {};
     std::array<float, channelCount> phaserFeedbackSample {}, flangerFeedbackSample {},
         chorusFeedbackSample {};
     int chorusWriteIndex = 0, flangerWriteIndex = 0, doublerWriteIndex = 0;

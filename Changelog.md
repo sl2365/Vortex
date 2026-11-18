@@ -1,5 +1,32 @@
 # Vortex — Changelog
 
+## 0.1.21 — Make Flanger controls audibly effective — 18 November 2026
+
+- Eliminate the Flanger's hidden 50% internal dry blend. The master MIX alone controls dry/wet, so OFFSET, PHASE, SHAPE and FEEDBK have a stronger effect. With a single Flanger enabled, MIX around 50% is the recommended test point.
+- Extend Flanger FEEDBK from -85..+85% to -100..+100%, using a stronger, sign-preserving perceptual response below 60%. Internal gain stays bounded at 0.96, below unity, to avoid uncontrolled regeneration.
+- Extend SHAPE from sine -> triangle -> smoothly rounded-square modulation, retaining sine at 0% and avoiding a hard LFO step.
+- Replace the subtle, fixed 1.7 kHz tone blend with a continuously adjusted two-pole low-pass, from 160 Hz at 0% to unfiltered at 100%. Tone also colours the feedback path; smooth existing per-sample parameter interpolation is retained.
+- Replace non-ASCII symbols in the editor's tooltips/readouts/help messages with portable plain text; enable MSVC /utf-8 to prevent Windows codepage-dependent display corruption.
+- Keep the four 82px panels, every knob/LED position, sequencer target IDs and all other engines unchanged. The Flanger feedback range and response and Flanger sound behaviour intentionally change before release.
+- Static and isolated mathematical checks only; Windows compilation and DAW audio evaluation outstanding.
+
+
+## 0.1.20 — Restore Phaser and Flanger controls — 18 November 2026
+
+- Corrected the editor effect dial array from 20 to 24 entries so four added Flanger controls no longer overwrite the adjacent Phaser dial pointers.
+- Added compile-time consistency assertions for effect-control IDs, captions, help descriptions and dial capacity to prevent this regression.
+- Restore six Phaser controls (RATE, DEPTH, STAGES, FREQ, FEEDBK, SPREAD) in Phaser, and seven Flanger controls (RATE, DEPTH, FEEDBK, PHASE, OFFSET, SHAPE, TONE) in Flanger.
+- All four effect panels remain 82px; no DSP, parameter schema, sequencer target, or audio routing changes.
+- Static source checks passed; Windows VST3 compilation and DAW visual/audio tests pending.
+
+
+## 0.1.19 — Two-line contextual tooltips — 18 November 2026
+
+- Restrict the bottom contextual-help strip to exactly two text rows, even when a control description is long; prevent extra lines from clipping vertically.
+- Shorten the longer FX help descriptions while retaining control ranges and meaning, without reducing label/value font sizes.
+- Preserve all other GUI geometry, four 82-pixel effect panels, sequencer and DSP behaviour.
+- Static source checks only; Windows VST3 compilation and DAW visual validation outstanding.
+
 ## 0.1.18 — Aligned header controls and expanded Flanger — 18 November 2026
 
 - Widened the four top LEVEL labels while retaining font size and 75-px spacing; draw the `::` target marker with four vector dots to avoid clipping.

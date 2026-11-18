@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(Vortex VERSION 0.1.18 LANGUAGES C CXX)
+project(Vortex VERSION 0.1.21 LANGUAGES C CXX)
 
 set(JUCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../_Tools/JUCE/_9.0.4")
 if(NOT EXISTS "${JUCE_DIR}/CMakeLists.txt")
@@ -8,7 +8,7 @@ endif()
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE")
 
 juce_add_plugin(Vortex
-    VERSION 0.1.18
+    VERSION 0.1.21
     COMPANY_NAME "Dead Channel Audio"
     BUNDLE_ID "com.sl23.vortex"
     IS_SYNTH FALSE
@@ -33,6 +33,9 @@ target_sources(Vortex PRIVATE
     PluginEditor.cpp PluginEditor.h
     VortexSequencer.h)
 target_compile_features(Vortex PRIVATE cxx_std_17)
+if(MSVC)
+    target_compile_options(Vortex PRIVATE /utf-8)
+endif()
 target_compile_definitions(Vortex PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 target_link_libraries(Vortex PRIVATE juce::juce_audio_utils VortexResources
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags

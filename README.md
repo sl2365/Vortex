@@ -1,6 +1,18 @@
-# Vortex — Dead Channel Audio
+# Vortex
 
-**Version:** 0.1.18 (Header alignment, level labels and expanded Flanger controls; Windows/DAW build unverified)  
+<div align="center">
+
+[![Release](https://img.shields.io/github/v/release/sl2365/Vortex?style=for-the-badge-square&logo=github&logoColor=white&color=purple)](https://github.com/sl2365/Vortex/releases/latest/download/Vortex.rar)
+[![Release Date](https://img.shields.io/github/release-date/sl2365/Vortex?style=for-the-badge-square&logo=github&logoColor=white&color=yellow)](https://github.com/sl2365/Vortex/releases)
+[![Latest Asset Downloads](https://img.shields.io/github/downloads/sl2365/Vortex/latest/Vortex.rar?style=for-the-badge-square&logo=github&logoColor=white&label=downloads-latest&displayAssetName=false&color=blue)](https://github.com/sl2365/Vortex/releases/latest)
+[![Total Downloads](https://img.shields.io/github/downloads/sl2365/Vortex/total?style=for-the-badge-square&logo=github&logoColor=white&label=downloads-total&color=blue)](https://github.com/sl2365/Vortex/releases)
+
+</div>
+
+![Vortex](Resources/Vortex-Seq.jpg)
+
+
+**Version:** 0.1.21 (Flanger feedback -100% to +100%, stronger low settings and text rendering; Windows/DAW build unverified)  
 **Platform:** Windows x64 VST3  
 **Framework:** JUCE 9.0.4  
 **Identity:** `sl23` / `vtx1` / `com.sl23.vortex`
@@ -15,7 +27,7 @@ Vortex is a single modulation effect with four independent engines:
 When an effect is switched off with its amber LED, its knobs, values and labels are dimmed but **remain fully adjustable**. The header guide shows an inactive grey track. You can prepare new settings while that effect is silent and bring it back in using its LED; its normal colours and live guide return immediately. Sequencer targets are retained, but bypassed knobs show their actual parameter positions while being edited, not sequencer-animated positions. Audio routing is unchanged.
 
 **Inline modulation guides:** Each panel has a red bar beside its heading, with a swept range and two moving indicators. Chorus shows delay tap movement in milliseconds, Phaser the frequency sweep in Hz, Flanger the short delay sweep in milliseconds, and Doubler the ensemble's active timing spread in milliseconds (two dots represent the first two voices). Doubler uses a logarithmic timing display so short doubling delays remain visible. These displays do not affect processing or add parameters.
-- **Flanger:** short modulated fractional delay with feedback. Adjust Rate, Depth, Feedback, stereo LFO Phase (0–180°), base delay Offset (0–12 ms), sweep Shape (sine to triangle) and wet/feedback Tone (dark to bright).
+- **Flanger:** short modulated fractional delay with feedback. Adjust Rate, Depth, Feedback, stereo LFO Phase (0–180°), base delay Offset (0–12 ms), sweep Shape (sine to triangle to rounded-square) and wet/feedback Tone (deep two-pole low-pass to unfiltered).
 - **Doubler:** up to eight independently positioned and detuned delay voices. Adjust Tightness, Detune, Spread, Pitch Depth, Pitch Rate and Timing. This is intended as *naturalistic doubling*, not a formant-preserving professional vocal pitch shifter.
 
 **Routing:** Motion Map has been completely removed. All independently enabled engines feed a normalised parallel wet bus. Their amber LEDs control participation; the master MIX controls the combined dry/wet balance, and OUT adjusts final gain. Four compact top-row LEVEL knobs (Chorus, Phaser, Doubler, Flanger) independently trim each wet effect from 0% to 200% (100% unity); they are available as sequencer targets and remain editable while an effect is off. Its former space is used by Phaser and Flanger.
