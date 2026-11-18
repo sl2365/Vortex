@@ -1,0 +1,183 @@
+# Vortex — Changelog
+
+## 0.1.18 — Aligned header controls and expanded Flanger — 18 November 2026
+
+- Widened the four top LEVEL labels while retaining font size and 75-px spacing; draw the `::` target marker with four vector dots to avoid clipping.
+- Match each top LEVEL label's normal colour to its respective effect header (Chorus cyan, Phaser lilac, Doubler green, Flanger orange). Existing sequencer-assignment highlighting still takes priority.
+- Centred the six Chorus knobs horizontally with equal 68-px spacing; all four panels remain exactly 82 px tall.
+- Restricted the logo-click zoom area to the visible VORTEX wordmark, approximately 170 px instead of 280 px.
+- Added four Flanger controls: PHASE 0–180 degrees, OFFSET 0–12 ms, SHAPE 0–100% sine-to-triangle blend and TONE 0–100% dark-to-bright wet/feedback damping.
+- Updated the Flanger modulation guide and delay-line allocation for the extended offset range; defaults reproduce the previous Flanger character.
+- Appended sequencer targets 41–44 for the new Flanger controls, preserving the previous 40 assignments and all 16 target slots.
+- No intentional changes to Chorus, Phaser, Doubler or global mixing DSP. Source checks only; Windows VST3 build and DAW listening remain to be done.
+
+
+## 0.1.17 — Correct gate routing and add four effect LEVEL trims — 18 November 2026
+
+- Gate OFF leaves both dry and processed audio alone; INPUT gates the original dry path only (effect feeds and tails remain live), EFFECT gates only the complete wet bus, OUTPUT gates the final dry/wet signal.
+- Prevent dry fallback leakage when the last effect is bypassed and the gate is in INPUT mode.
+- Add CHORUS, PHASER, DOUBLER and FLANGER top-row LEVEL knobs, matching THEME knob dimensions (30×30) and label styling, between logo and preset selector. Controls remain visible in preset-browser mode.
+- All new levels are wet-only, smoothly adjusted 0–200% with 100% default/unity, and appended to sequencer targets without disturbing existing assignments.
+- Levels are editable but dimmed when their own engine is bypassed; four 82-pixel main effect panels remain unchanged.
+- No change to Chorus, Phaser, Doubler or Flanger processing algorithms.
+- Source/static checks only; Windows compile and DAW audio/GUI verification still required.
+
+
+## 0.1.16 — Editable dimmed controls during effect bypass — 17 November 2026
+
+- Keep knobs and parameter-drag labels fully interactive while their effect's amber LED is off; apply 58% alpha to the existing knob/label/value colours instead of disabling components.
+- With an effect bypassed, display its actual adjustable parameter positions rather than sequencer-animation overrides; preserve assignments and restore animation when re-enabled.
+- The inactive effect's header guide remains a static grey track; no change to its existing bypass/audio routing.
+- Preserve all four 82 px panels, controls, text sizes, LED and guide positions, DSP and sequencer logic.
+- Source checks completed; Windows VST3 compilation and DAW performance tests remain outstanding.
+
+## 0.1.15 — Greyed-out bypassed FX controls and inactive guides — 17 November 2026
+
+- Bypassing Chorus, Phaser, Flanger or Doubler via its amber LED greys out and disables that engine's knobs, labels and value readouts; re-enabling immediately restores them.
+- An inactive effect's header guide shows only its grey track (no red sweep range or moving markers). Live movement resumes upon re-enabling.
+- Appearance follows the four APVTS enable parameters at 30 Hz, including changes from preset loading and host automation.
+- Clear sequencer-animation visual overrides for controls that are disabled, without changing sequencer target assignments or audio processing.
+- No changes to panel geometry (four 82 px panels), knob/LED positions, parameter schema, DSP, routing, sequencer or plug-in identity.
+- Source checks completed; Windows VST3 build and DAW visual/automation tests remain outstanding.
+
+## 0.1.14 — Inline live guides for all four effects — 17 November 2026
+
+- Added compact red swept-range guides alongside the CHORUS, DOUBLER and FLANGER headings, using the same style as the Phaser guide.
+- Chorus shows the current stereo voice-1 delay taps and possible active-voice delay range (ms); Flanger shows live L/R tap delays and its modulation range (ms).
+- Doubler shows the first two voice delays and total active read-head timing spread (ms), with a low-delay-friendly logarithmic scale.
+- Displays read atomic snapshots of smoothed audio-DSP values once per block. No GUI-only oscillator, new plug-in parameters or audio algorithm changes.
+- Kept all four effect panels exactly 82 px high, all knob/LED/label/value dimensions and positions unchanged, as well as sequencer, routing and plugin identity.
+- Repaint only the two title-row strips at 30 Hz; no expanded panel or new monitor row.
+- Windows build and DAW visual tests remain outstanding.
+
+## 0.1.13 — Equal-height effect panels and inline Phaser frequency guide — 17 November 2026
+
+- Restored identical 82 px heights for Chorus, Phaser, Doubler and Flanger panels, with both rows aligned. No additional top-panel height or other interface expansion.
+- Moved the red Phaser frequency-range guide into the same title row as PHASER and shortened the guide to fit. L/R frequency markers and live DSP-derived range calculations are unchanged.
+- Aligned all six Phaser knobs with the Chorus knob row, keeping the established identical knob sizes, label sizes and value sizes. Aligned the Doubler and Flanger rows.
+- Shifted the four amber effect on/off LEDs left by 6 px, setting a matching 3 px top/left inset in each panel without resizing the LEDs.
+- Preserved all DSP, parameters, 32-step sequencer, routing, presets, plugin identity and existing 0.1.12 C4458 warning fix.
+- Source layout and archive checks passed; Windows build and DAW visual validation remain outstanding.
+
+## 0.1.12 — Simplified Phaser layout and permanent parallel routing — 17 November 2026
+
+- Removed Motion Map completely, including its XY and enable parameters, LED, GUI component, automated routing, and sequencer targets.
+- Retained the existing equal-weight, enabled-engine parallel wet bus as the permanent routing mode; master MIX and OUT remain unchanged.
+- Restored separate Chorus/Doubler and Phaser/Flanger rows. Expanded the right-hand panels into the former Map area so all six Phaser knobs fit on one row at unchanged font and knob size.
+- Moved the live red Phaser frequency-range monitor above its six knobs; removed the MORE/BACK controls and the Flanger-overlapping expansion mode.
+- Fixed MSVC C4458 in PluginEditor.cpp by renaming the local `constrainer` variable to `editorConstrainer`.
+- Preserved the 32-step sequencer and 16 assignable target slots. The target list is now 36 entries (two retired Map choices removed); pre-release preset/host-state compatibility is intentionally not guaranteed. Schema version advanced to 2.
+- Windows/DAW compilation and visual/audio validation outstanding.
+
+## 0.1.11 — Phaser character and live LFO-frequency guide — 17 November 2026
+
+- Expanded Phaser controls: Centre Frequency (75 Hz–7.5 kHz), signed Feedback (−90–90%) and Stereo LFO Phase (0–180°), with sample-smoothed changes.
+- Reworked the phaser's all-pass pole spacing and selectable 2/4/6/8/10/12 stages to produce a greater range of subtle and resonant notches.
+- Removed the internal 50% dry blend from the phaser engine; Vortex's global MIX now performs dry/wet mixing once, producing deeper notches at around 50% MIX.
+- Phaser shows four equal-sized knobs (Rate, Depth, Stages, Centre Frequency) plus a red frequency-range bar with moving stereo markers. MORE/BACK reveals Feedback and Stereo Phase without shrinking any knobs; it temporarily covers Flanger controls, while Flanger audio stays active.
+- Added a 30 Hz red range guide showing the DSP-calculated current frequency limits and moving L/R sweep positions, including sequencer-modulated controls.
+- Added the new Phaser controls to the existing sequencer target menu without changing the 32-step/16-slot system.
+- Adjusted version/build labels; pre-release parameter compatibility is not required.
+- Static source and DSP mathematical checks performed; not compiled or auditioned as Windows VST3 in this environment.
+
+## 0.1.10 — Doubler wet-output balance — 17 November 2026
+
+- Increased only the Doubler's processed (wet) output by +2.5 dB (1.3335x), equally in mono and stereo.
+- The adjustment is after voice summing and before both Motion Map and manual parallel routing, so it applies consistently in either mode.
+- No changes to dry volume, MIX, OUT, other DSP engines, knob controls, parameter IDs, sequencer, GUI layout, or the v0.1.9 stronger Chorus feedback.
+- Source-level checks and ZIP integrity passed; Windows/DAW compilation and audible level/clipping checks remain outstanding.
+
+## 0.1.9 — Stronger Chorus Feedback — 17 November 2026
+
+- Strengthened the Chorus Feedback response across its existing 0–100% control while retaining a below-unity maximum coefficient.
+- Replaced the fully averaged multi-voice feedback source with a stable blend of 75% dedicated primary delay tap and 25% normalised multi-voice output. Adding Voices no longer progressively weakens regeneration.
+- Soft-bounded the signal stored in the feedback path, allowing more obvious resonant and watery chorus effects without uncontrolled level growth.
+- Kept the existing parameter ID, range, default, sequencer target, layout and state schema unchanged.
+- Corrected the visible GUI version text from the stale v0.1.7 label to v0.1.9.
+
+## 0.1.8 — Fix frozen target knob graphics during bypass — 17 November 2026
+
+- While Vortex is bypassed, sequencer-assigned knob graphics display their actual host parameter values rather than cached animated positions.
+- On re-enabling Vortex, sequencer animation resumes without changing target assignments, modulation, DSP, presets, or control layouts.
+- Applies to main controls and sequencer-panel targets through the shared animated-value accessor.
+- Source inspection and archive checks passed; Windows/DAW validation still required.
+
+## 0.1.7 — Yellow knob indicators — 17 November 2026
+
+- Changed the shared knob-indicator colour to the same muted yellow (`#D2B84F`) used by Afterglow and the supplied Dusk template.
+- HUE, SAT and LUM sequencer knobs retain their dynamically selected HSL accent colours.
+- No DSP, parameter, layout, sequencer, preset, logo or plugin-identity changes.
+- Windows/DAW build not verified in this environment.
+
+## 0.1.6 — Doubler detune and effect-panel layout — 16 November 2026
+
+- Replaced Doubler's very subtle detune-only delay wobble with independent, paired positive/negative pitch offsets up to approximately +/-36 cents, using two 220 ms overlap-add read heads per voice. Detune works independently of Pitch Depth/Rate and is smoothed with the existing Detune parameter.
+- Reordered Doubler's adjacent pitch controls to P RATE before P DEPTH; no change to their parameter IDs or sequencer target assignments.
+- Swapped the entire Doubler and Flanger panel locations. The left column is wider, with Chorus above Doubler; the right column is narrower, with Phaser above Flanger.
+- Replaced the Doubler Voices dropdown with a full-size seventh knob. All effect labels, knob sizes and numeric readout sizes remain identical; the Voices control remains bound to the same host/sequencer parameter.
+- No intentional changes to Chorus, Phaser, Flanger DSP, Motion Map, gate sequencer, 32-step sequencer or preset browser.
+- Pre-release: existing preset compatibility is not required. Windows/DAW compilation and audible artifact checks are still outstanding.
+
+# Vortex — Changelog
+
+## 0.1.5 — Doubler engine overhaul — 16 November 2026
+
+- Replaced the former two-tap Doubler with eight independently modulated voices and actual stereo panning.
+- Added a 1-to-8 Voices selector in the Doubler header, keeping all six knob labels and value sizes uniform.
+- Extended Pitch Depth to 0-250%, Pitch Rate to 0-100% and Timing to 0-800 ms. Pitch Depth maps to approximately +/-120 cents at maximum in Vortex, not the undisclosed AIR algorithm.
+- Removed the 8 ms pitch-sweep limiter that weakened the old algorithm, enlarged delay buffers and added crossfaded Timing/Tightness delay-head changes.
+- Smoothed changes to the number of active voices; added voice-count sequencing.
+- Four engines, Motion Map, zoom and 32-step sequencer otherwise unchanged.
+- Windows/DAW compilation, audibility and click-freedom have not been verified.
+
+# Vortex — Changelog
+
+## 0.1.4 — Chorus Feedback and Pre-Delay — 16 November 2026
+
+- Changed Chorus Feedback to unipolar 0–100% (default 0%), including parameter range, modulation and randomisation.
+- Normalised the Chorus feedback signal by the sum of active voice gains and limited its internal coefficient to 0.95 at the 100% knob position.
+- Added Chorus Pre-Delay from 0 to 50 ms (default 18 ms), smoothed per sample and assignable to the existing sequencer slots.
+- Added a sixth Chorus knob without changing the font size, readout size, panel dimensions or the other effects.
+- Ensured Chorus tap times remain positive, including when Pre-Delay is 0 ms and Depth is high.
+- No further tuning of the Chorus character or other DSP engines in this revision.
+- Pre-release parameters may change; preset compatibility is not guaranteed.
+
+## 0.1.3 — Chorus character and consistent typography — 16 November 2026
+
+- Fixed identical font size, knob geometry, and value textbox sizes across all 17 engine knobs. Added compact `ct` readout for Doubler Pitch Depth rather than shrinking its font.
+- Added amber Motion Map On/Off LED; ON uses XY blending; OFF gives equal-weight parallel blending of enabled effects. Mode switch is sample-smoothed. The Map becomes non-interactive while disabled.
+- Rebuilt Chorus modulation with independently drifting voice clocks, differing delay centres, soft waveform asymmetry, stereo phase offsets, and energy-aware wet gain. Removed the fixed coherent voice sweep that produced robotic ensemble movement.
+- Chorus Feedback now defaults to 0%, suitable for comparing with the provided AIR Chorus reference.
+- Kept all four FX LED switches, sequencer and logo zoom menu intact.
+- Pre-release: preset / host automation compatibility is not a release requirement; no preset compatibility is claimed.
+
+# Vortex Changelog
+
+## 0.1.2 — Dusk-style zoom, effect LEDs and audio adjustment smoothing — 16 November 2026
+
+- Matched Dusk's dark, headed GUI Zoom popup (75%-300% in 25% increments).
+- Added four amber effect on/off LEDs with smooth dry-signal crossfading.
+- Added Chorus Feedback, Width and Voices up to 8; Chorus Rate now 0.01-10 Hz and Depth 0-24 ms.
+- Added Doubler Pitch Depth (cents), Pitch Rate (Hz) and Timing (ms).
+- Smoothed all effect control changes per audio sample to reduce zipper/click artifacts, notably Doubler Tightness and Detune.
+- Smoothed the Chorus voice activation and Phaser stage selection instead of discontinuously reconfiguring active voices/stages.
+- Preserved original host parameter order and all original 24 sequencer target indices; new parameters and targets were appended.
+- **Compatibility note:** Chorus Depth retains its parameter ID but now uses milliseconds instead of percent; legacy settings must be checked.
+- **Validation:** Source consistency reviewed; Windows build and live DAW listening not yet completed.
+
+## 0.1.1 — Zoom popup cleanup — 16 November 2026
+
+- Simplified the logo-triggered native Windows menu to percentage-only entries (75–300%), with the selected level checked.
+- Kept the existing zoom and pixel-size feedback outside the popup, including tooltip and manual resize information.
+- No changes to DSP, sequencer, parameter identities, plugin IDs or saved data formats.
+
+## 0.1.0 — Initial source preview — 16 November 2026
+
+- Forked the uploaded Dusk v0.1.1 source, preserving the 32-step sequencer/gate sequencer and 16 target slots.
+- Isolated product identifiers, settings/preset/sequence storage, data formats and plugin bundle identity under Vortex / `sl23`.
+- Removed the Dusk distortion bank and placeholder dual-filter model, replacing them with Chorus, Phaser, Flanger and Doubler engines.
+- Added a four-corner, draggable Motion Map with bilinear blending between the four effect engines.
+- Arranged all twelve effect knobs on the left and Motion Map directly before MIX and OUT on the right.
+- Added a native Windows logo-triggered zoom menu from 75% to 300%, displaying percentage and current window dimensions.
+- Retained the existing expandable sequencer interface, data routines and drag-and-drop target assignment.
+- This source package is **not yet compile-tested or host-tested**.
