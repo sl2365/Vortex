@@ -161,6 +161,7 @@ The folder is created when needed. `Settings` holds interface settings such as z
 
 ## Interface tips
 
+- **THEME:** At **0%**, the original vortex image is fully visible across the two backgrounds. Turning toward **50%** fades the image to the plain charcoal surround. From **50% to 100%**, the original solid aqua colour fades in. The dark effect/knob panels remain opaque throughout. The two background panels retain their separate boundaries and dark gap.
 - **Zoom:** Click the Vortex logo and choose 75%–300% in 25% increments. You can also resize the window manually.
 - **Context help:** Move the pointer over a control to read its short explanation at the bottom of the interface.
 - **Bypassed effects:** Their controls stay editable, although the knobs and guides are dimmed.
@@ -182,7 +183,7 @@ The folder is created when needed. `Settings` holds interface settings such as z
 ### Building from source
 
 1. Place the source files in `_Projects\Vortex` and keep your existing `_Projects\Vortex\Resources` folder intact.
-2. Confirm that `Resources\logo.png` or `Resources\logo.svg` exists. The build embeds `logo.png` if available, otherwise it uses the SVG fallback.
+2. Confirm that `Resources\logo.png` or `Resources\logo.svg` exists. The build embeds `logo.png` if available, otherwise it uses the SVG fallback. Also keep the new `Resources\vortex_backdrop.png` image; it is embedded during the build.
 3. Double-click `_Projects\Vortex\- Build.bat`.
 4. Read `_Projects\Vortex\Results.log` if the build fails. A successful build writes `dist\Vortex.vst3`.
 
@@ -192,7 +193,7 @@ The build script does **not** install the plug-in automatically. The documentati
 
 | Item | Value |
 |---|---|
-| Current version | **v1.24.0** |
+| Current version | **v1.24.9** |
 | Plug-in format | Windows x64 VST3 audio effect |
 | Company | Dead Channel Audio |
 | Manufacturer / plug-in codes | `sl23` / `vtx1` |
@@ -207,6 +208,6 @@ The project was developed from the stripped Dusk/Afterglow interface template. I
 
 ### Verification and compatibility
 
-The source has undergone static consistency checks, but the **v1.24.0 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
+The source has undergone static consistency checks, but the **v1.24.9 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
 
 Because Vortex has not previously been released, compatibility with older development presets and automation mappings is not guaranteed. There is no migration from the earlier prototype data-folder names.

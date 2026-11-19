@@ -1,5 +1,38 @@
 # Vortex — Changelog
 
+## 1.24.9 — Three-stage Theme background control — 19 November 2026
+
+- Make THEME 0% display the existing vortex backdrop at full artwork strength, fading it out to the original plain charcoal surround at 50%.
+- From THEME 50% to 100%, fade in the original solid aqua surround colour; preserve the 100% default and settings storage.
+- Keep one image spanning the two separate background panels, with opaque inner controls and the dark dividing gap unchanged.
+- Update the Theme contextual help; no DSP, sequencer, parameter IDs, layout, or Resources changes.
+
+## 1.24.8 — Compact contextual help — 19 November 2026
+
+- Show contextual tooltips as `PARAMETER NAME | Description` on one line whenever the full text fits.
+- Wrap longer help at word boundaries onto a second line only; preserve the existing font size and prevent a third line from being drawn.
+- Keep the GUI layout, effects, sequencer and all DSP processing unchanged.
+
+## 1.24.7 — Single-image background and opaque controls — 19 November 2026
+
+- Render the single existing `Resources/vortex_backdrop.png` image across the combined main and sequencer backgrounds in one consistent coordinate space; crop each panel to its respective portion rather than repeating the artwork twice.
+- Preserve the eight-pixel dark gap between background panels and make all inner effect, mix and sequencer control panels completely opaque.
+- No changes to the image asset, Resources folder, DSP, sequencer, controls, or layout.
+
+## 1.24.6 — Artwork location and Windows build fix — 19 November 2026
+
+- Move the new, embedded layered aqua background artwork from `source/vortex_backdrop.png` to `Resources/vortex_backdrop.png`; CMake now embeds it from there.
+- Fix Visual Studio C3480/C4573/C2439/C2064 in `PluginEditor.cpp` by capturing `this` instead of trying to capture the `presetBrowserOpen` member directly in the panel-drawing lambda.
+- Add an explicit missing-background check to the Windows build script. The source ZIP contains only the newly introduced resource image, not the user's existing logo or screenshots.
+- No changes to DSP, sequencer, controls or GUI layout.
+
+## 1.24.5 — Layered aqua vortex artwork — 19 November 2026
+
+- Rebuilt from the untouched v1.24.0 source, not from any v1.24.1–v1.24.4 background experiments.
+- Added a high-quality aqua vortex texture embedded directly from `source/vortex_backdrop.png` (never from `Resources`).
+- Rendered inside the two existing, separately clipped aqua background panels; preserved their 8px gap, the dark control surfaces and the original layout.
+- No changes to effect DSP, routing, sequencer, controls or plugin identifiers.
+
 ## 1.24.0 — Version milestone — 18 November 2026
 
 - Bump version metadata and display from 1.23.6 to 1.24.0 to mark the expanded Chorus, Phaser and Flanger waveform controls.

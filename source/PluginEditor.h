@@ -85,9 +85,8 @@ private:
         int lastWheelDirection = 0;
     };
 
-    // The bottom contextual-help strip has room for exactly two lines.
-    // Draw each line separately so a long description cannot wrap onto
-    // a third line and get clipped vertically.
+    // Display contextual help on one line when possible, otherwise wrap
+    // at word boundaries onto a second line without shrinking the font.
     class TwoLineHelpLabel final : public juce::Label
     {
     public:

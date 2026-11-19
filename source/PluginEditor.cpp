@@ -74,6 +74,52 @@ juce::Path makeStarPath(juce::Rectangle<float> bounds)
     return path;
 }
 
+// THEME blends between the existing vortex image, neutral charcoal and
+// the original solid aqua colour without changing the knob/control panels.
+float vortexImageBlend(float themePercent) noexcept
+{
+    return juce::jlimit(0.0f, 1.0f, (50.0f - themePercent) / 50.0f);
+}
+
+float vortexSolidColourBlend(float themePercent) noexcept
+{
+    return juce::jlimit(0.0f, 1.0f, (themePercent - 50.0f) / 50.0f);
+}
+
+// One embedded PNG covers the combined top and sequencer background area.
+// Each panel clips the SAME scaled image to its own rounded bounds. The dark
+// eight-pixel gap remains empty; the image is never restarted/repeated.
+void drawAquaVortexTexture(juce::Graphics& g,
+                           juce::Rectangle<float> visibleArea,
+                           juce::Rectangle<float> wholeImageArea,
+                           float cornerRadius,
+                           float strength)
+{
+    strength = juce::jlimit(0.0f, 1.0f, strength);
+    if (strength < 0.001f)
+        return;
+
+    // ImageCache prevents decoding the embedded PNG on every repaint.
+    static const juce::Image texture = juce::ImageCache::getFromMemory(
+        BinaryData::vortex_backdrop_png,
+        static_cast<size_t>(BinaryData::vortex_backdrop_pngSize));
+    if (! texture.isValid())
+        return;
+
+    juce::Path roundedClip;
+    roundedClip.addRoundedRectangle(visibleArea, cornerRadius);
+    g.saveState();
+    g.reduceClipRegion(roundedClip);
+    g.setOpacity(0.88f * strength);
+    g.drawImageWithin(texture,
+                      juce::roundToInt(wholeImageArea.getX()),
+                      juce::roundToInt(wholeImageArea.getY()),
+                      juce::roundToInt(wholeImageArea.getWidth()),
+                      juce::roundToInt(wholeImageArea.getHeight()),
+                      juce::RectanglePlacement::stretchToFit);
+    g.restoreState();
+}
+
 struct InterfaceSettings
 {
     int scalePercent = 100;
@@ -1503,9 +1549,11 @@ public:
     SequencerPanel(VortexAudioProcessor& audioProcessor,
                    LookAndFeel& sharedLookAndFeel,
                    std::function<juce::Colour()> surroundColourProvider,
+                   std::function<float()> themePercentProvider,
                    std::function<void(const juce::String&)> helpCallback)
         : processor(audioProcessor),
           surroundColour(std::move(surroundColourProvider)),
+          themePercent(std::move(themePercentProvider)),
           showHelp(std::move(helpCallback)),
           grid(audioProcessor, sharedLookAndFeel, patternMenuLookAndFeel),
           targets(audioProcessor, showHelp)
@@ -2014,6 +2062,18 @@ public:
             ? surroundColour() : juce::Colour(0xff24292f);
         graphics.setColour(surround);
         graphics.fillRoundedRectangle(getLocalBounds().toFloat(), 12.0f);
+        // One shared picture, clipped to this independent lower background.
+        // At 0% THEME the image is full strength; at 50% it disappears.
+        const float imageStrength = themePercent != nullptr
+            ? vortexImageBlend(themePercent()) : 0.0f;
+        // The shared image starts at global y=52 and ends at global y=522.
+        // This panel begins at global y=276, so draw the full image shifted
+        // upwards by 224 px; clipping reveals only its lower portion.
+        drawAquaVortexTexture(graphics, getLocalBounds().toFloat(),
+                              { 0.0f, -224.0f,
+                                static_cast<float>(getWidth()), 470.0f },
+                              12.0f, imageStrength);
+        // Fully opaque inner control panels; no artwork bleeds through.
         const auto panelColour = juce::Colour(0xff171b20);
         const auto drawPanel = [&graphics, panelColour](juce::Rectangle<float> area)
         {
@@ -2472,6 +2532,7 @@ private:
 
     VortexAudioProcessor& processor;
     std::function<juce::Colour()> surroundColour;
+    std::function<float()> themePercent;
     std::function<void(const juce::String&)> showHelp;
     LookAndFeel patternMenuLookAndFeel { true };
     StepGrid grid;
@@ -2534,34 +2595,83 @@ private:
 
 void VortexAudioProcessorEditor::TwoLineHelpLabel::paint(juce::Graphics& g)
 {
-    const auto text = getText();
-    const auto lineBreak = text.indexOfChar('\n');
+    const auto original = getText();
+    const auto lineBreak = original.indexOfChar('\n');
     const auto bounds = getLocalBounds().reduced(0, 1);
+    const auto font = getFont();
 
-    g.setFont(getFont());
+    g.setFont(font);
     g.setColour(findColour(juce::Label::textColourId)
         .withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
 
-    // Single-line notifications retain their original centred position.
-    if (lineBreak < 0)
+    // Existing help producers use TITLE + newline + description. Display
+    // them inline as "TITLE | Description", wrapping only if necessary.
+    juce::String text;
+    if (lineBreak >= 0)
     {
-        g.drawFittedText(text, bounds, juce::Justification::centredLeft,
-                         1, 0.82f);
+        const auto title = original.substring(0, lineBreak).trim();
+        const auto description = original.substring(lineBreak + 1)
+            .replaceCharacter('\n', ' ').replaceCharacter('\r', ' ').trim();
+        text = title + (title.isNotEmpty() && description.isNotEmpty()
+                            ? " | " : "") + description;
+    }
+    else
+    {
+        text = original.replaceCharacter('\r', ' ').trim();
+    }
+
+    const auto textWidth = [&font](const juce::String& line)
+    {
+        return juce::GlyphArrangement::getStringWidth(font, line);
+    };
+    const auto availableWidth = static_cast<float>(bounds.getWidth());
+    if (textWidth(text) <= availableWidth)
+    {
+        // Short help uses the full height and the original font size.
+        g.drawText(text, bounds, juce::Justification::centredLeft, false);
         return;
     }
 
-    const auto title = text.substring(0, lineBreak);
-    const auto description = text.substring(lineBreak + 1)
-        .replaceCharacter('\n', ' ').replaceCharacter('\r', ' ');
-    auto firstLine = bounds;
-    firstLine.setHeight(bounds.getHeight() / 2);
-    const auto secondLine = bounds.withTrimmedTop(firstLine.getHeight());
+    // Find a natural word boundary for a maximum of two lines; never
+    // change the font size or let JUCE produce an accidental third line.
+    int splitAt = -1;
+    for (int i = 0; i < text.length(); ++i)
+        if (text[i] == ' '
+            && textWidth(text.substring(0, i)) <= availableWidth)
+            splitAt = i;
 
-    // Both rows are strictly single-line: no third line or vertical crop.
-    g.drawFittedText(title, firstLine, juce::Justification::centredLeft,
-                     1, 0.82f);
-    g.drawFittedText(description, secondLine,
-                     juce::Justification::centredLeft, 1, 0.82f);
+    if (splitAt < 1)
+    {
+        // Defensive fallback for an unusually long unbroken token.
+        g.drawFittedText(text, bounds, juce::Justification::centredLeft,
+                         1, 1.0f);
+        return;
+    }
+
+    const auto firstText = text.substring(0, splitAt).trimEnd();
+    auto secondText = text.substring(splitAt + 1).trimStart();
+    if (textWidth(secondText) > availableWidth)
+    {
+        // Long descriptions still occupy only two rows; truncate only
+        // the exceptional case that would overflow both available rows.
+        const juce::String ellipsis("...");
+        int endAt = -1;
+        for (int i = 0; i < secondText.length(); ++i)
+            if (secondText[i] == ' '
+                && textWidth(secondText.substring(0, i) + ellipsis)
+                    <= availableWidth)
+                endAt = i;
+        secondText = (endAt > 0
+            ? secondText.substring(0, endAt).trimEnd() : juce::String())
+            + ellipsis;
+    }
+
+    auto firstRow = bounds;
+    firstRow.setHeight(bounds.getHeight() / 2);
+    const auto secondRow = bounds.withTrimmedTop(firstRow.getHeight());
+    g.drawText(firstText, firstRow, juce::Justification::centredLeft, false);
+    g.drawText(secondText, secondRow,
+               juce::Justification::centredLeft, false);
 }
 
 void VortexAudioProcessorEditor::PresetDisplayLabel::paint(
@@ -3263,7 +3373,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     content.addMouseListener(this, true);
     content.setInterceptsMouseClicks(false, true);
 
-    versionLabel.setText("v1.24.0", juce::dontSendNotification);
+    versionLabel.setText("v1.24.9", juce::dontSendNotification);
     versionLabel.setJustificationType(juce::Justification::centred);
     versionLabel.setColour(juce::Label::textColourId, knobIndicatorColour);
     versionLabel.setFont(juce::Font(juce::FontOptions(8.5f,
@@ -3398,7 +3508,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
         dial->slider.onValueChange();
     }
     themeDial = addDial("", "THEME",
-        "Turn left for charcoal, right for stronger colour.", false);
+        "0%: vortex image; 50%: plain charcoal; 100%: solid aqua.", false);
     themeDial->label.setJustificationType(juce::Justification::centred);
     themeDial->slider.setRange(0.0, 100.0, 0.1);
     themeDial->slider.setValue(storedSettings.themePercent,
@@ -3407,9 +3517,12 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     themeDial->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     themeDial->slider.onValueChange = [this]
     {
-        information.setText("THEME\nAdjust colour intensity.",
-                            juce::dontSendNotification);
+        information.setText(
+            "THEME | 0% vortex image; 50% charcoal; 100% solid aqua.",
+            juce::dontSendNotification);
         repaint();
+        if (sequencerPanel != nullptr)
+            sequencerPanel->repaint();
     };
 
     logoHotspot.setName("Vortex Logo / Zoom");
@@ -3627,6 +3740,8 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     sequencerPanel = std::make_unique<SequencerPanel>(
         processor, lookAndFeel,
         [this] { return panelColour(1); },
+        [this] { return themeDial != nullptr
+            ? static_cast<float>(themeDial->slider.getValue()) : 100.0f; },
         [this](const juce::String& helpText)
         {
             information.setText(helpText, juce::dontSendNotification);
@@ -3838,12 +3953,10 @@ juce::Colour VortexAudioProcessorEditor::panelAccent(int filterIndex) const
 
 juce::Colour VortexAudioProcessorEditor::panelColour(int filterIndex) const
 {
-    const float amount = themeDial != nullptr
-        ? juce::jlimit(0.0f, 1.0f,
-            static_cast<float>(themeDial->slider.getValue() * 0.01))
-        : 1.0f;
+    const float themePercentValue = themeDial != nullptr
+        ? static_cast<float>(themeDial->slider.getValue()) : 100.0f;
     return juce::Colour(0xff24292f).interpolatedWith(
-        panelAccent(filterIndex), amount);
+        panelAccent(filterIndex), vortexSolidColourBlend(themePercentValue));
 }
 
 void VortexAudioProcessorEditor::updateContextSensitiveHelp()
@@ -4966,20 +5079,25 @@ void VortexAudioProcessorEditor::paint(juce::Graphics& g)
         juce::AffineTransform::scale(scale).translated(offsetX, offsetY));
 
     const auto typeColour = panelAccent(1);
-    const float fullColourAmount = themeDial != nullptr
-        ? juce::jlimit(0.0f, 1.0f,
-            static_cast<float>(themeDial->slider.getValue() * 0.01))
-        : 1.0f;
+    const float themePercentValue = themeDial != nullptr
+        ? static_cast<float>(themeDial->slider.getValue()) : 100.0f;
     const auto surroundColour = juce::Colour(0xff24292f).interpolatedWith(
-        typeColour, fullColourAmount);
+        typeColour, vortexSolidColourBlend(themePercentValue));
     g.setColour(surroundColour);
     g.fillRoundedRectangle(8.0f, 52.0f,
                            static_cast<float>(designWidth - 16), 216.0f,
                            12.0f);
+    drawAquaVortexTexture(g,
+                          { 8.0f, 52.0f,
+                            static_cast<float>(designWidth - 16), 216.0f },
+                          { 8.0f, 52.0f,
+                            static_cast<float>(designWidth - 16), 470.0f },
+                          12.0f, vortexImageBlend(themePercentValue));
 
     const auto drawControlPanel = [&g](float x, float y,
                                        float width, float height)
     {
+        // Keep every effect/control surface entirely opaque.
         g.setColour(juce::Colour(0xff171b20));
         g.fillRoundedRectangle(x, y, width, height, 8.0f);
         g.setColour(knobTrackColour);

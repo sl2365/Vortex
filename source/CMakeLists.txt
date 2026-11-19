@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(Vortex VERSION 1.24.0 LANGUAGES C CXX)
+project(Vortex VERSION 1.24.9 LANGUAGES C CXX)
 
 set(JUCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../_Tools/JUCE/_9.0.4")
 if(NOT EXISTS "${JUCE_DIR}/CMakeLists.txt")
@@ -8,7 +8,7 @@ endif()
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE")
 
 juce_add_plugin(Vortex
-    VERSION 1.24.0
+    VERSION 1.24.9
     COMPANY_NAME "Dead Channel Audio"
     BUNDLE_ID "com.sl23.vortex"
     IS_SYNTH FALSE
@@ -24,15 +24,21 @@ juce_add_plugin(Vortex
     VST3_CATEGORIES Fx Modulation
     PRODUCT_NAME "Vortex")
 
-# Prefer the user's Resources/logo.png if present. Keep the original SVG
-# fallback so source packages can build before that local image is copied.
+# Embed the new Vortex background from Resources along with the user's
+# existing logo. Do not modify any other user-maintained Resources files.
+set(VORTEX_BACKDROP "${CMAKE_CURRENT_LIST_DIR}/../Resources/vortex_backdrop.png")
+if(NOT EXISTS "${VORTEX_BACKDROP}")
+    message(FATAL_ERROR "Vortex artwork missing: ${VORTEX_BACKDROP}")
+endif()
 set(VORTEX_CUSTOM_LOGO "${CMAKE_CURRENT_LIST_DIR}/../Resources/logo.png")
 if(EXISTS "${VORTEX_CUSTOM_LOGO}")
-    juce_add_binary_data(VortexResources SOURCES "${VORTEX_CUSTOM_LOGO}")
+    juce_add_binary_data(VortexResources
+        SOURCES "${VORTEX_CUSTOM_LOGO}" "${VORTEX_BACKDROP}")
     target_compile_definitions(Vortex PRIVATE VORTEX_HAS_PNG_LOGO=1)
 else()
-    juce_add_binary_data(VortexResources
-        SOURCES "${CMAKE_CURRENT_LIST_DIR}/../Resources/logo.svg")
+    juce_add_binary_data(VortexResources SOURCES
+        "${CMAKE_CURRENT_LIST_DIR}/../Resources/logo.svg"
+        "${VORTEX_BACKDROP}")
     target_compile_definitions(Vortex PRIVATE VORTEX_HAS_PNG_LOGO=0)
 endif()
 
