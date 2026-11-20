@@ -193,7 +193,7 @@ The build script does **not** install the plug-in automatically. The documentati
 
 | Item | Value |
 |---|---|
-| Current version | **v1.24.9** |
+| Current version | **v1.24.11** |
 | Plug-in format | Windows x64 VST3 audio effect |
 | Company | Dead Channel Audio |
 | Manufacturer / plug-in codes | `sl23` / `vtx1` |
@@ -204,10 +204,10 @@ The build script does **not** install the plug-in automatically. The documentati
 | Runtime data folder | `Vortex_Data` beside the VST3 |
 | Audio framework | JUCE 9.0.4 |
 
-The project was developed from the stripped Dusk/Afterglow interface template. It retains the original 32-step sequencer and 16 assignable target slots, with additional targets for Vortex's effects and waveforms. The effect engines use parallel wet routing, parameter smoothing and per-engine bypass fades. Expensive processing is reduced when effects are fully inactive; this has not been independently CPU-benchmarked.
+The project was developed from the stripped Dusk/Afterglow interface template. It retains the original 32-step sequencer and 16 assignable target slots, with additional targets for Vortex's effects and waveforms. The effect engines use parallel wet routing, parameter smoothing and per-engine bypass fades. Inactive effects continue to skip their expensive DSP once their bypass fades finish. This version also reduces active-engine CPU work through cached stationary control calculations, cheaper delay-buffer indexing, an accurately interpolated phaser coefficient lookup, and fewer redundant Doubler reads. Isolated numerical tests passed; full Windows VST3 CPU measurements remain outstanding.
 
 ### Verification and compatibility
 
-The source has undergone static consistency checks, but the **v1.24.9 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
+The source has undergone static consistency checks, but the **v1.24.11 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
 
 Because Vortex has not previously been released, compatibility with older development presets and automation mappings is not guaranteed. There is no migration from the earlier prototype data-folder names.

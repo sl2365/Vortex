@@ -1,5 +1,23 @@
 # Vortex — Changelog
 
+## 1.24.11 — Modulation DSP CPU reduction — 20 November 2026
+
+- Use 65,536-sample sine and rounded-square lookup tables prepared in `prepareToPlay()` for the four modulation engines, replacing repeated expensive trigonometric calculations in the audio callback. All eight waveform selections, their phase/rate behaviour, crossfades and routing remain the same; only minute floating-point differences from interpolation are expected.
+- Move the Phaser sweep guide's two exponential calculations from every audio sample to once per processing block, using the final active smoothed values as before. This is a display-only change and does not alter its filter DSP or visual range.
+- Standalone waveform checks: sine worst error 4.2e-7, rounded-square 1.3e-6, with relative waveform RMS differences below -134 dB. An isolated eight-voice Chorus audio comparison found approximately -84.5 dB relative RMS difference at 44.1, 48 and 96 kHz. **Not bit-identical**, but intended to retain audible character.
+- Isolated Linux C++ microbenchmarks measured approximately 2.1–2.5x faster sine evaluation and 5.9x faster rounded-square evaluation. Those are hot-kernel figures, **not** measured full-VST3 or PHI CPU reductions.
+- No changes to the GUI, JUCE plugin identity, parameters, preset schema, gate, sequencer, effect bypass or Resources. The Windows build, whole-plugin CPU reduction, and DAW sound comparison remain to be verified.
+
+## 1.24.10 — Audio engine CPU optimisation — 20 November 2026
+
+- Phaser: replace 12 per-stereo-sample tangent calculations for the six all-pass pairs with a 16,384-step coefficient lookup precomputed at `prepareToPlay()` for the current sample rate. Preserve the original stage structure, resonance, feedback, and smoothing. A standalone high-feedback Phaser simulation found an RMS difference of about -109 to -118 dB relative to the original signal at 44.1–192 kHz.
+- Chorus, Phaser and Flanger: skip evaluating a second LFO shape when the selected waveform blend is exactly zero; keep the existing waveform definitions and smooth transitions.
+- Flanger: reuse the tone-filter coefficient while TONE is stationary; recompute on the very next changed sample.
+- Doubler: cache stationary pitch-depth/rate calculations and stereo pan weights; avoid unused Timing/Tightness crossfade reads once the transition is finished, and avoid duplicate detune-head reads when both heads coincide. Crossfades, independent voices and delay state remain intact.
+- All delay engines: replace integer modulo wrapping in the fractional delay reader and ring write indices with equivalent conditional wrapping. Calculate per-voice gain normalization only once per processing block.
+- Preserve all four effect algorithms, wet/dry and gate routing, smoothing, bypass fades, sequencer assignments, GUI, settings and embedded artwork. No new parameters or dependencies.
+- Standalone numerical and hot-path tests passed; the complete Windows VST3 was not compiled or DAW/CPU-benchmarked in this environment. Test sound, CPU use and long playback at 44.1/48/96 kHz before release.
+
 ## 1.24.9 — Three-stage Theme background control — 19 November 2026
 
 - Make THEME 0% display the existing vortex backdrop at full artwork strength, fading it out to the original plain charcoal surround at 50%.

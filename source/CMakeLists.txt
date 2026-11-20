@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(Vortex VERSION 1.24.9 LANGUAGES C CXX)
+project(Vortex VERSION 1.24.11 LANGUAGES C CXX)
 
 set(JUCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../_Tools/JUCE/_9.0.4")
 if(NOT EXISTS "${JUCE_DIR}/CMakeLists.txt")
@@ -8,7 +8,7 @@ endif()
 add_subdirectory("${JUCE_DIR}" "${CMAKE_BINARY_DIR}/JUCE")
 
 juce_add_plugin(Vortex
-    VERSION 1.24.9
+    VERSION 1.24.11
     COMPANY_NAME "Dead Channel Audio"
     BUNDLE_ID "com.sl23.vortex"
     IS_SYNTH FALSE

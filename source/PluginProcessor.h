@@ -196,6 +196,18 @@ private:
     std::array<LinearSmoother, 8> doublerVoiceGain {};
     std::array<LinearSmoother, 4> effectEnabledValues {};
     std::array<std::vector<float>, channelCount> chorusDelay, flangerDelay, doublerDelay;
+    // Table is built only in prepareToPlay. Linear interpolation differs from
+    // the original all-pass coefficient by less than floating-point precision
+    // over the permitted sweep, avoiding twelve tan() calls per stereo sample.
+    static constexpr int phaserCoefficientTableSize = 16384;
+    std::array<float, phaserCoefficientTableSize + 1> phaserCoefficientTable {};
+    // Shared 65,536-step sine/rounded-square lookups prepared outside the
+    // audio callback. Interpolation minimises waveform approximation error.
+    static constexpr int modulationSineTableSize = 65536;
+    std::array<float, modulationSineTableSize + 1> modulationSineTable {};
+    std::array<float, modulationSineTableSize + 1> modulationRoundedSquareTable {};
+    std::array<float, maxPhaserStages / 2> phaserPoleRatios {};
+    float phaserCoefficientTableScale = 0.0f;
     std::array<std::array<float, maxPhaserStages>, channelCount> phaserState {};
     // Inactive filter states are cleared once after their wet fade reaches zero.
     bool phaserProcessingLastSample = false, flangerProcessingLastSample = false;
