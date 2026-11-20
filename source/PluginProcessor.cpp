@@ -1297,6 +1297,17 @@ void VortexAudioProcessor::processBlock(
     constexpr std::array<float, 8> voicePitchSpeed {
         0.86f, 1.09f, 0.93f, 1.17f,
         0.79f, 1.26f, 1.03f, 1.36f };
+    // The first two Doubler voices retain their original 220-ms detune cycle.
+    // Independent cycles for voices 3-8 prevent their pitch-shift crossfades
+    // from lining up, without increasing the selected number of cents.
+    constexpr std::array<float, 8> voiceDetuneCycleSeconds {
+        0.220f, 0.220f, 0.187f, 0.257f,
+        0.202f, 0.291f, 0.239f, 0.273f };
+    // A level-balanced emphasis on the outer offsets restores audible
+    // beating when several voices are active. At 0c all weights are unity.
+    constexpr std::array<float, 8> voiceDetuneEmphasis {
+        1.44f, 1.44f, 0.86f, 0.86f,
+        0.54f, 0.54f, 1.16f, 1.16f };
     // Reuse calculations for steady parameters. While automating, a changed
     // sample value still gets the original precise calculation immediately.
     float lastTone = -1.0f, cachedToneAlpha = 0.0f;
@@ -1451,6 +1462,29 @@ void VortexAudioProcessor::processBlock(
         std::array<float, 8> doubleVoiceGains {};
         for (size_t v = 0; v < doubleVoiceGains.size(); ++v)
             doubleVoiceGains[v] = doublerVoiceGain[v].getNextValue();
+        if (runDoubler && doublerDetune > 0.000001f)
+        {
+            // Redistribute, rather than raise, the Doubler's summed voice
+            // level. This follows the already-smoothed voice gains so
+            // changes to VOICES stay continuous with no abrupt gain jump.
+            float baseGainSum = 0.0f;
+            float emphasisedGainSum = 0.0f;
+            for (size_t v = 0; v < doubleVoiceGains.size(); ++v)
+            {
+                const float voiceGain = doubleVoiceGains[v];
+                baseGainSum += voiceGain;
+                const float emphasis = 1.0f + doublerDetune
+                    * (voiceDetuneEmphasis[v] - 1.0f);
+                doubleVoiceGains[v] = voiceGain * emphasis;
+                emphasisedGainSum += doubleVoiceGains[v];
+            }
+            if (emphasisedGainSum > 0.000001f)
+            {
+                const float trim = baseGainSum / emphasisedGainSum;
+                for (auto& voiceGain : doubleVoiceGains)
+                    voiceGain *= trim;
+            }
+        }
         // The AIR-style percentage is a *Vortex* scaling, not a claim about
         // AIR's undisclosed mapping: 250% here means ~+/-120 cents peak.
         float pitchHz = 0.0f;
@@ -1785,9 +1819,12 @@ void VortexAudioProcessor::processBlock(
             // Detune is a separate, persistent pitch offset for each voice,
             // not merely more slow delay-time wobble. Opposite-sign pairs
             // give a recognisable stereo ensemble even with P DEPTH at zero.
+            // Voices 1 and 2 remain exactly -36/+36 cents at maximum.
+            // The additional voices are intentionally not mirror-image pairs,
+            // giving a more human ensemble with less mutual reinforcement.
             constexpr std::array<float, 8> voiceDetuneCents {
-                -36.0f, 36.0f, -22.0f, 22.0f,
-                -13.0f, 13.0f, -29.0f, 29.0f };
+                -36.0f, 36.0f, -23.0f, 20.0f,
+                -13.0f, 15.0f, -29.0f, 27.0f };
             const float maxDelaySamples = static_cast<float>(
                 doublerDelay[0].size() - 3);
             finalDoublerMinimumMs = 1350.0f;
@@ -1801,9 +1838,11 @@ void VortexAudioProcessor::processBlock(
                     static_cast<float>(doublerVoicePitchPhases[v]));
                 const float driftWave = modulationSine(modulationSineTable,
                     static_cast<float>(doublerVoiceDriftPhases[v]));
-                // Two 220-ms overlap-add read heads, a half cycle apart, each
-                // run at a slightly different reading speed. The inactive head
-                // wraps only at zero gain, avoiding clicks from head resets.
+                // Two overlapping read heads, a half cycle apart. Voices 1-2
+                // retain the original 220-ms cycle; voices 3-8 have distinct
+                // cycles. Their span scales with cycle length to preserve the
+                // specified cents offsets despite the different head periods.
+                // The hidden head wraps only at zero gain to avoid clicks.
                 // The first-order cents-to-ratio approximation has <2% error
                 // at the largest +/-36-cent offset and avoids expensive pow()
                 // calls in the per-sample voice loop.
@@ -1817,7 +1856,8 @@ void VortexAudioProcessor::processBlock(
                 const float headBGain = 1.0f - headAGain;
                 const float detuneSpanSamples = -0.00057762265f
                     * doublerDetune * voiceDetuneCents[v]
-                    * static_cast<float>(currentSampleRate * 0.220);
+                    * static_cast<float>(currentSampleRate
+                        * voiceDetuneCycleSeconds[v]);
                 const float headAOffset = detuneSpanSamples * (detunePhase - 0.5f);
                 const float headBOffset = detuneSpanSamples * (detunePhaseB - 0.5f);
                 // Base moves automatically away from the write head when deep
@@ -1998,7 +2038,8 @@ void VortexAudioProcessor::processBlock(
                 advancePhase(doublerVoicePitchPhases[v], pitchHz * voicePitchSpeed[v]);
                 advancePhase(doublerVoiceDriftPhases[v],
                     0.11f + 0.037f * static_cast<float>(v));
-                advancePhase(doublerVoiceDetunePhases[v], 1.0f / 0.220f);
+                advancePhase(doublerVoiceDetunePhases[v],
+                    1.0f / voiceDetuneCycleSeconds[v]);
             }
         if (gateMode == 1)
         {

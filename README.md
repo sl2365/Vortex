@@ -94,7 +94,7 @@ Creates up to eight additional, independently moving voices. It is intended for 
 | **TIGHT** | Adjusts how closely the simulated doubles follow the source. |
 | **SPREAD** | Separates the voices across the stereo field. |
 | **VOICES** | Selects 1 to 8 doubled voices. |
-| **DETUNE** | Sets the maximum per-voice pitch difference from 0 to +/-36 cents. The knob displays cents; voices detune both above and below the source pitch. |
+| **DETUNE** | Sets the maximum per-voice pitch difference from 0 to +/-36 cents. The knob displays cents; individual voices use different sharp/flat offsets and staggered pitch cycles for a fuller ensemble at high voice counts. |
 | **TIMING** | Adds delay offsets, from 0 to 800 ms. |
 
 For a natural double, start with several voices, moderate Spread and short Timing. Larger Timing settings can sound like distinct repeats rather than tightly layered performances.
@@ -207,7 +207,7 @@ The build script does **not** install the plug-in automatically. The documentati
 
 | Item | Value |
 |---|---|
-| Current version | **v1.24.18** |
+| Current version | **v1.24.19** |
 | Plug-in format | Windows x64 VST3 audio effect |
 | Company | Dead Channel Audio |
 | Manufacturer / plug-in codes | `sl23` / `vtx1` |
@@ -222,6 +222,6 @@ The project was developed from the stripped Dusk/Afterglow interface template. I
 
 ### Verification and compatibility
 
-The source has undergone static consistency checks, but the **v1.24.18 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
+The source has undergone static consistency checks, but the **v1.24.19 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
 
 Because Vortex has not previously been released, compatibility with older development presets and automation mappings is not guaranteed. There is no migration from the earlier prototype data-folder names.

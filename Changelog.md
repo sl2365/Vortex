@@ -1,5 +1,12 @@
 # Vortex — Changelog
 
+## 1.24.19 — More expressive multi-voice Doubler Detune — 20 November 2026
+
+- Make the eight Doubler detune offsets less symmetrically paired while retaining the maximum +/-36 cents and the original first two voice offsets.
+- Stagger the overlap-add detune cycles for voices 3-8 (with corresponding read-head span compensation), keeping their intended pitch offsets and smooth wraps.
+- Redistribute voice gains toward the wider offsets in a level-balanced way as DETUNE increases; 0.0c retains existing rendering. This is most apparent with four to eight voices.
+- Preserve RATE, DEPTH, VOICES and DETUNE control ranges, all other DSP, sequencer, background rendering, host-shutdown fix, and GUI layout.
+
 ## 1.24.18 — Clearer WAVE tooltips — 20 November 2026
 
 - Expand `Rnd Sq` to `Round Square` in the Chorus, Phaser and Flanger WAVE tooltip descriptions only.
