@@ -90,6 +90,7 @@ float vortexSolidColourBlend(float themePercent) noexcept
 // Each panel clips the SAME scaled image to its own rounded bounds. The dark
 // eight-pixel gap remains empty; the image is never restarted/repeated.
 void drawAquaVortexTexture(juce::Graphics& g,
+                           const juce::Image& texture,
                            juce::Rectangle<float> visibleArea,
                            juce::Rectangle<float> wholeImageArea,
                            float cornerRadius,
@@ -99,10 +100,8 @@ void drawAquaVortexTexture(juce::Graphics& g,
     if (strength < 0.001f)
         return;
 
-    // ImageCache prevents decoding the embedded PNG on every repaint.
-    static const juce::Image texture = juce::ImageCache::getFromMemory(
-        BinaryData::vortex_backdrop_png,
-        static_cast<size_t>(BinaryData::vortex_backdrop_pngSize));
+    // The editor owns this already-decoded image; no static ImageCache
+    // singleton or background cleanup timer is required.
     if (! texture.isValid())
         return;
 
@@ -1550,10 +1549,12 @@ public:
                    LookAndFeel& sharedLookAndFeel,
                    std::function<juce::Colour()> surroundColourProvider,
                    std::function<float()> themePercentProvider,
+                   juce::Image backgroundImage,
                    std::function<void(const juce::String&)> helpCallback)
         : processor(audioProcessor),
           surroundColour(std::move(surroundColourProvider)),
           themePercent(std::move(themePercentProvider)),
+          vortexBackdrop(std::move(backgroundImage)),
           showHelp(std::move(helpCallback)),
           grid(audioProcessor, sharedLookAndFeel, patternMenuLookAndFeel),
           targets(audioProcessor, showHelp)
@@ -2069,7 +2070,8 @@ public:
         // The shared image starts at global y=52 and ends at global y=522.
         // This panel begins at global y=276, so draw the full image shifted
         // upwards by 224 px; clipping reveals only its lower portion.
-        drawAquaVortexTexture(graphics, getLocalBounds().toFloat(),
+        drawAquaVortexTexture(graphics, vortexBackdrop,
+                              getLocalBounds().toFloat(),
                               { 0.0f, -224.0f,
                                 static_cast<float>(getWidth()), 470.0f },
                               12.0f, imageStrength);
@@ -2533,6 +2535,7 @@ private:
     VortexAudioProcessor& processor;
     std::function<juce::Colour()> surroundColour;
     std::function<float()> themePercent;
+    juce::Image vortexBackdrop;
     std::function<void(const juce::String&)> showHelp;
     LookAndFeel patternMenuLookAndFeel { true };
     StepGrid grid;
@@ -2598,9 +2601,9 @@ void VortexAudioProcessorEditor::TwoLineHelpLabel::paint(juce::Graphics& g)
     const auto original = getText();
     const auto lineBreak = original.indexOfChar('\n');
     const auto bounds = getLocalBounds().reduced(0, 1);
-    const auto font = getFont();
+    const auto helpFont = getFont();
 
-    g.setFont(font);
+    g.setFont(helpFont);
     g.setColour(findColour(juce::Label::textColourId)
         .withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
 
@@ -2620,9 +2623,9 @@ void VortexAudioProcessorEditor::TwoLineHelpLabel::paint(juce::Graphics& g)
         text = original.replaceCharacter('\r', ' ').trim();
     }
 
-    const auto textWidth = [&font](const juce::String& line)
+    const auto textWidth = [&helpFont](const juce::String& line)
     {
-        return juce::GlyphArrangement::getStringWidth(font, line);
+        return juce::GlyphArrangement::getStringWidth(helpFont, line);
     };
     const auto availableWidth = static_cast<float>(bounds.getWidth());
     if (textWidth(text) <= availableWidth)
@@ -3339,6 +3342,9 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
     const auto storedSettings = loadInterfaceSettings();
+    vortexBackdrop = juce::ImageFileFormat::loadFrom(
+        BinaryData::vortex_backdrop_png,
+        static_cast<size_t>(BinaryData::vortex_backdrop_pngSize));
     const auto presetsDirectory = VortexAudioProcessor::getPresetsDirectory();
     loadFavouritePresets();
     const auto storedPresetFile = processor.getCurrentPresetFile();
@@ -3373,7 +3379,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     content.addMouseListener(this, true);
     content.setInterceptsMouseClicks(false, true);
 
-    versionLabel.setText("v1.24.11", juce::dontSendNotification);
+    versionLabel.setText("v1.24.13", juce::dontSendNotification);
     versionLabel.setJustificationType(juce::Justification::centred);
     versionLabel.setColour(juce::Label::textColourId, knobIndicatorColour);
     versionLabel.setFont(juce::Font(juce::FontOptions(8.5f,
@@ -3742,6 +3748,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
         [this] { return panelColour(1); },
         [this] { return themeDial != nullptr
             ? static_cast<float>(themeDial->slider.getValue()) : 100.0f; },
+        vortexBackdrop,
         [this](const juce::String& helpText)
         {
             information.setText(helpText, juce::dontSendNotification);
@@ -3787,12 +3794,22 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     observedEditorWidth = getWidth();
     observedThemeValue = themeDial->slider.getValue();
     saveInterfaceSettings();
-    startTimerHz(30);
+    // Use vblank updates instead of JUCE's global TimerThread.
+    guiVBlank = std::make_unique<juce::VBlankAttachment>(
+        this, [this](double frameTimeSeconds)
+        {
+            if (lastGuiFrameTime < 0.0
+                || frameTimeSeconds - lastGuiFrameTime >= 0.030)
+            {
+                lastGuiFrameTime = frameTimeSeconds;
+                updateGuiTick();
+            }
+        });
 }
 
 VortexAudioProcessorEditor::~VortexAudioProcessorEditor()
 {
-    stopTimer();
+    guiVBlank.reset();
     saveInterfaceSettings();
     if (presetFolderNameWindow != nullptr)
     {
@@ -5087,7 +5104,7 @@ void VortexAudioProcessorEditor::paint(juce::Graphics& g)
     g.fillRoundedRectangle(8.0f, 52.0f,
                            static_cast<float>(designWidth - 16), 216.0f,
                            12.0f);
-    drawAquaVortexTexture(g,
+    drawAquaVortexTexture(g, vortexBackdrop,
                           { 8.0f, 52.0f,
                             static_cast<float>(designWidth - 16), 216.0f },
                           { 8.0f, 52.0f,
@@ -5331,7 +5348,7 @@ void VortexAudioProcessorEditor::resized()
     updateZoomTooltip();
 }
 
-void VortexAudioProcessorEditor::timerCallback()
+void VortexAudioProcessorEditor::updateGuiTick()
 {
     const bool leftKeyDown = isShowing()
         && juce::KeyPress::isKeyCurrentlyDown(juce::KeyPress::leftKey);

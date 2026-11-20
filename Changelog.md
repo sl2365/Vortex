@@ -1,5 +1,18 @@
 # Vortex — Changelog
 
+## 1.24.13 — Host shutdown investigation and compiler warnings — 20 November 2026
+
+- Avoid the global `juce::ImageCache` singleton and the function-local static background image. Decode the embedded PNG once per editor using `juce::ImageFileFormat::loadFrom`, and share a lightweight JUCE image reference with the sequencer. The image is released with the editor; no additional cache/timer is started just for the background. This targets a plausible Windows host-exit hang but still requires PHI and SAVIHost validation.
+- Fix MSVC warning C4458 by renaming the `TwoLineHelpLabel::paint` local `font` to `helpFont` (including its lambda capture).
+- Fix MSVC warning C4456 by renaming the inner Chorus `voicePan` lookup to `chorusVoicePan`, avoiding shadowing the outer Doubler lookup.
+- No changes to DSP calculations, waveforms, effect/sequence parameters, theme appearance, panel geometry, plugin identity, or `Resources`.
+
+## 1.24.12 — Shutdown diagnostic: display-synchronised GUI updates — 20 November 2026
+
+- Replace the editor's 30 Hz `juce::Timer` with an editor-owned `juce::VBlankAttachment` limited to approximately 30 updates/second, to test a possible JUCE TimerThread-related host shutdown hang.
+- Release the VBlank attachment first in the editor destructor, before freeing other editor members.
+- No DSP, parameter, sequencer processing, artwork or interface geometry changes. This is a diagnostic candidate until tested with PHI and SAVIHost on Windows.
+
 ## 1.24.11 — Modulation DSP CPU reduction — 20 November 2026
 
 - Use 65,536-sample sine and rounded-square lookup tables prepared in `prepareToPlay()` for the four modulation engines, replacing repeated expensive trigonometric calculations in the audio callback. All eight waveform selections, their phase/rate behaviour, crossfades and routing remain the same; only minute floating-point differences from interpolation are expected.

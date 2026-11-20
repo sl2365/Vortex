@@ -1543,11 +1543,11 @@ void VortexAudioProcessor::processBlock(
                     // New voices occupy progressively different delays and
                     // stereo positions; the VOICES knob now changes width and
                     // ensemble density, not only the tap count.
-                    constexpr std::array<float, 8> voicePan {
+                    constexpr std::array<float, 8> chorusVoicePan {
                         0.0f, -0.9f, 0.9f, -0.5f,
                         0.5f, -1.0f, 1.0f, 0.0f };
                     const float stereoWeight = activeChannels == 2
-                        ? 1.0f + (channel == 0 ? -0.40f : 0.40f) * voicePan[v]
+                        ? 1.0f + (channel == 0 ? -0.40f : 0.40f) * chorusVoicePan[v]
                         : 1.0f;
                     chorusWet += gain * stereoWeight * tap;
                     if (voice == 0)

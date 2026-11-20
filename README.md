@@ -193,7 +193,7 @@ The build script does **not** install the plug-in automatically. The documentati
 
 | Item | Value |
 |---|---|
-| Current version | **v1.24.11** |
+| Current version | **v1.24.13** |
 | Plug-in format | Windows x64 VST3 audio effect |
 | Company | Dead Channel Audio |
 | Manufacturer / plug-in codes | `sl23` / `vtx1` |
@@ -208,6 +208,6 @@ The project was developed from the stripped Dusk/Afterglow interface template. I
 
 ### Verification and compatibility
 
-The source has undergone static consistency checks, but the **v1.24.11 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
+The source has undergone static consistency checks, but the **v1.24.13 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
 
 Because Vortex has not previously been released, compatibility with older development presets and automation mappings is not guaranteed. There is no migration from the earlier prototype data-folder names.

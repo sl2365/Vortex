@@ -7,7 +7,6 @@
 
 class VortexAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                        public juce::DragAndDropContainer,
-                                       private juce::Timer,
                                        private juce::ListBoxModel
 {
 public:
@@ -217,6 +216,9 @@ private:
     Dial* themeDial = nullptr;
     Dial* browserMixDial = nullptr;
     std::unique_ptr<juce::Drawable> logoDrawable;
+    // Shared with the sequencer panel by Image's lightweight ref-counted copy.
+    // Owned per editor to avoid a static ImageCache timer during host shutdown.
+    juce::Image vortexBackdrop;
     LogoHotspot logoHotspot;
     juce::Label versionLabel;
     juce::ToggleButton bypassButton;
@@ -300,8 +302,12 @@ private:
     void listBoxItemClicked(int, const juce::MouseEvent&) override;
     void returnKeyPressed(int) override;
     void selectedRowsChanged(int) override;
-    void timerCallback() override;
+    void updateGuiTick();
     void saveInterfaceSettings() const;
+
+    // The editor owns the display callback; no JUCE Timer is registered.
+    std::unique_ptr<juce::VBlankAttachment> guiVBlank;
+    double lastGuiFrameTime = -1.0;
 
     int observedEditorWidth = designWidth;
     double observedThemeValue = 100.0;

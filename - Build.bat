@@ -25,7 +25,7 @@ set "BUNDLE_BINARY=%BUILD_DIR%\Vortex_artefacts\Release\VST3\Vortex.vst3\Content
 set "FINAL_PLUGIN=%DIST_DIR%\Vortex.vst3"
 
 echo.
-echo Vortex 64-bit VST3 - v1.24.11 Build
+echo Vortex 64-bit VST3 - v1.24.13 Build
 echo ======================================
 echo.
 
