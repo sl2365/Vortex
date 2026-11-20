@@ -1,5 +1,39 @@
 # Vortex — Changelog
 
+## 1.24.18 — Clearer WAVE tooltips — 20 November 2026
+
+- Expand `Rnd Sq` to `Round Square` in the Chorus, Phaser and Flanger WAVE tooltip descriptions only.
+- Keep the compact `Rnd Sq` waveform knob readouts, all audio processing, parameters, sequencer targets, GUI layout and existing resources unchanged.
+
+## 1.24.17 — Consistent control layout and Doubler Detune readout — 20 November 2026
+
+- Doubler DETUNE displays 0.0–36.0 cents rather than 0–100%, reflecting the maximum positive/negative per-voice offsets. Keep the underlying 0–100 parameter, smoothing, sequencer and DSP unchanged; host text entry is converted from cents back to the internal value.
+- Align stereo-related controls (Chorus WIDTH, Phaser SPREAD, Flanger PHASE, Doubler SPREAD) in knob position 4.
+- Align Chorus/Doubler VOICES and Phaser STAGES in position 5, retain RATE/DEPTH/FEEDBK in their existing first-three positions, and keep WAVE in position 7 for Chorus, Phaser and Flanger.
+- Swap Flanger TONE and WAVE (positions 6 and 7). Reorder Doubler to RATE, DEPTH, TIGHT, SPREAD, VOICES, DETUNE, TIMING.
+- GUI-only knob placement and numeric presentation update; preserve audio DSP, plugin parameter IDs, all 82-pixel panels, shutdown repair, CPU optimisations, guides and Resources.
+
+## 1.24.16 — Chorus per-voice guide and feedback knob order — 20 November 2026
+
+- Replace the two near-static Chorus extrema markers with one moving dot per active voice (1–8), each located at that voice's current stereo-average delay time. Dots use the already calculated tap delays from the final audio sample in each block; no DSP changes or extra delay reads.
+- Preserve the fixed 0–115 ms grey scale and the existing expected red sweep range; Phaser, Flanger and Doubler guides remain unchanged.
+- Move Chorus and Phaser FEEDBK knobs immediately after their respective DEPTH knobs, keeping all seven controls, positions, sizes and parameter/sequencer IDs.
+- Update guide hover help and README control order/marker documentation; preserve the ImageCache shutdown fix, CPU optimisations and all Resources files.
+
+## 1.24.15 — Accurate modulation guides and README installation notes — 20 November 2026
+
+- Chorus live guide markers now represent the current minimum and maximum delay taps across all active voices and available channels, instead of only the first voice.
+- Doubler live guide markers now represent the current outermost delay positions across all active voices, instead of the first two voices. Existing red range calculations (including timing crossfade heads) remain unchanged.
+- Retain the fixed grey scales and existing true modulation-range bars for Phaser and Flanger; no artificial stretching to full width.
+- Document all four guide scales, colours and marker meanings in README, add installation requirements, and match the documented Doubler control order.
+- Preserve audio output/DSP, sequencer, CPU optimisations, Theme, 82-pixel panels and the verified host-shutdown fix. No Resources files included.
+
+## 1.24.14 — Doubler control order — 20 November 2026
+
+- Move the existing Doubler RATE and DEPTH knobs to the leftmost two positions, followed by TIGHT, DETUNE, SPREAD, TIMING and VOICES, matching the other effects.
+- Preserve all seven knob dimensions, spacing, labels, parameter IDs, sequencer targets, audio processing, CPU optimisations, and the v1.24.13 host shutdown fix.
+- No `Resources` files changed or packaged.
+
 ## 1.24.13 — Host shutdown investigation and compiler warnings — 20 November 2026
 
 - Avoid the global `juce::ImageCache` singleton and the function-local static background image. Decode the embedded PNG once per editor using `juce::ImageFileFormat::loadFrom`, and share a lightweight JUCE image reference with the sequencer. The image is released with the editor; no additional cache/timer is started just for the background. This targets a plausible Windows host-exit hang but still requires PHI and SAVIHost validation.

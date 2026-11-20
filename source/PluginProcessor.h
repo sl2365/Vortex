@@ -63,14 +63,27 @@ public:
                  phaserDisplayMinimumHz.load(std::memory_order_relaxed),
                  phaserDisplayMaximumHz.load(std::memory_order_relaxed) };
     }
-    // Two representative moving taps and the current range, in milliseconds.
-    // All readings are published once per audio block for the UI thread.
+    // Chorus red sweep boundaries and legacy extrema, published once per block.
     std::array<float, 4> getChorusSweepDisplay() const noexcept
     {
         return { chorusDisplayMs[0].load(std::memory_order_relaxed),
                  chorusDisplayMs[1].load(std::memory_order_relaxed),
                  chorusDisplayMinimumMs.load(std::memory_order_relaxed),
                  chorusDisplayMaximumMs.load(std::memory_order_relaxed) };
+    }
+    // One live marker per active Chorus voice. Stereo voices use the mean
+    // of their actual L/R tap delay times; no extra DSP reads are performed.
+    std::array<float, 8> getChorusVoiceDisplayMs() const noexcept
+    {
+        std::array<float, 8> values {};
+        for (size_t voice = 0; voice < values.size(); ++voice)
+            values[voice] = chorusVoiceDisplayMs[voice].load(
+                std::memory_order_relaxed);
+        return values;
+    }
+    int getChorusDisplayVoiceCount() const noexcept
+    {
+        return chorusVoiceDisplayCount.load(std::memory_order_relaxed);
     }
     std::array<float, 4> getFlangerSweepDisplay() const noexcept
     {
@@ -79,7 +92,8 @@ public:
                  flangerDisplayMinimumMs.load(std::memory_order_relaxed),
                  flangerDisplayMaximumMs.load(std::memory_order_relaxed) };
     }
-    // Doubler markers show the first two voices; the span includes all voices.
+    // Doubler markers show the current minimum/maximum active voice timing;
+    // the red span also includes the two heads of timing/detune crossfades.
     std::array<float, 4> getDoublerSweepDisplay() const noexcept
     {
         return { doublerDisplayMs[0].load(std::memory_order_relaxed),
@@ -215,6 +229,8 @@ private:
     std::atomic<float> phaserDisplayMinimumHz { 0.0f };
     std::atomic<float> phaserDisplayMaximumHz { 0.0f };
     std::array<std::atomic<float>, channelCount> chorusDisplayMs {}, flangerDisplayMs {};
+    std::array<std::atomic<float>, 8> chorusVoiceDisplayMs {};
+    std::atomic<int> chorusVoiceDisplayCount { 0 };
     std::atomic<float> chorusDisplayMinimumMs { 0.0f }, chorusDisplayMaximumMs { 0.0f };
     std::atomic<float> flangerDisplayMinimumMs { 0.0f }, flangerDisplayMaximumMs { 0.0f };
     std::array<std::atomic<float>, 2> doublerDisplayMs {};

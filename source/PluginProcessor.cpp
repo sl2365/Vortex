@@ -384,9 +384,21 @@ VortexAudioProcessor::createParameterLayout()
     layout.push_back(std::make_unique<APF>(
         juce::ParameterID(ParameterIds::doublerTightness, 1), "Doubler Tightness",
         percentRange, 72.0f, percentageAttributes));
+    // Internally 0-100 for unchanged smoothing and sequencer behaviour.
+    // Display the maximum absolute per-voice pitch offset in cents instead.
+    const auto doublerDetuneText = juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float amount, int)
+        {
+            return juce::String(amount * 0.36f, 1) + "c";
+        })
+        .withValueFromStringFunction([](const juce::String& text)
+        {
+            return juce::jlimit(0.0f, 100.0f,
+                                text.getFloatValue() / 0.36f);
+        });
     layout.push_back(std::make_unique<APF>(
         juce::ParameterID(ParameterIds::doublerDetune, 1), "Doubler Detune",
-        percentRange, 45.0f, percentageAttributes));
+        percentRange, 45.0f, doublerDetuneText));
     layout.push_back(std::make_unique<APF>(
         juce::ParameterID(ParameterIds::doublerSpread, 1), "Doubler Spread",
         percentRange, 80.0f, percentageAttributes));
@@ -788,6 +800,8 @@ void VortexAudioProcessor::resetEffectState() noexcept
     phaserDisplayMinimumHz.store(0.0f, std::memory_order_relaxed);
     phaserDisplayMaximumHz.store(0.0f, std::memory_order_relaxed);
     for (auto& value : chorusDisplayMs) value.store(0.0f, std::memory_order_relaxed);
+    for (auto& value : chorusVoiceDisplayMs) value.store(0.0f, std::memory_order_relaxed);
+    chorusVoiceDisplayCount.store(0, std::memory_order_relaxed);
     for (auto& value : flangerDisplayMs) value.store(0.0f, std::memory_order_relaxed);
     for (auto& value : doublerDisplayMs) value.store(0.0f, std::memory_order_relaxed);
     chorusDisplayMinimumMs.store(0.0f, std::memory_order_relaxed);
@@ -1256,8 +1270,13 @@ void VortexAudioProcessor::processBlock(
     float lastPhaserCenterForGuide = 0.0f;
     float lastPhaserDepthForGuide = 0.0f;
     bool phaserGuideWasActive = false;
-    std::array<float, channelCount> finalChorusMs {}, finalFlangerMs {};
-    std::array<float, 2> finalDoublerMs {};
+    // UI-only markers: capture the actual last-sample tap positions from
+    // each active Chorus voice, alongside the existing Doubler extrema.
+    std::array<float, 2> finalChorusMs {}, finalDoublerMs {};
+    std::array<float, 8> finalChorusVoiceMs {};
+    int finalChorusVoiceCount = 0;
+    std::array<float, channelCount> finalFlangerMs {};
+    bool chorusGuideHasTap = false, doublerGuideHasTap = false;
     float finalChorusMinimumMs = 0.0f, finalChorusMaximumMs = 0.0f;
     float finalFlangerMinimumMs = 0.0f, finalFlangerMaximumMs = 0.0f;
     float finalDoublerMinimumMs = 0.0f, finalDoublerMaximumMs = 0.0f;
@@ -1536,7 +1555,33 @@ void VortexAudioProcessor::processBlock(
                         + 12.0f * static_cast<float>(voice) / 7.0f;
                     const float delayMs = tapOffsetMs + chorusPreDelay
                         + chorusDepth * (1.0f + waveState);
-                    if (voice == 0) finalChorusMs[c] = delayMs;
+                    if (sample == sampleCount - 1)
+                    {
+                        // Keep the original extrema for the red guide's
+                        // existing data contract. Publish one position per
+                        // voice instead of drawing only those two extrema.
+                        if (! chorusGuideHasTap)
+                        {
+                            finalChorusMs[0] = finalChorusMs[1] = delayMs;
+                            chorusGuideHasTap = true;
+                        }
+                        else
+                        {
+                            finalChorusMs[0] = juce::jmin(finalChorusMs[0], delayMs);
+                            finalChorusMs[1] = juce::jmax(finalChorusMs[1], delayMs);
+                        }
+                        if (channel == 0)
+                        {
+                            finalChorusVoiceMs[v] = delayMs;
+                            finalChorusVoiceCount = juce::jmax(
+                                finalChorusVoiceCount, voice + 1);
+                        }
+                        else
+                        {
+                            finalChorusVoiceMs[v] = 0.5f *
+                                (finalChorusVoiceMs[v] + delayMs);
+                        }
+                    }
                     const float tap = readDelay(
                         chorusLine, chorusWriteIndex,
                         delayMs * static_cast<float>(currentSampleRate * 0.001));
@@ -1747,7 +1792,7 @@ void VortexAudioProcessor::processBlock(
                 doublerDelay[0].size() - 3);
             finalDoublerMinimumMs = 1350.0f;
             finalDoublerMaximumMs = 0.0f;
-            finalDoublerMs[0] = finalDoublerMs[1] = 0.0f;
+            // The live markers are gathered from all audible voices below.
             for (size_t v = 0; v < 8; ++v)
             {
                 const float gain = doubleVoiceGains[v];
@@ -1792,8 +1837,20 @@ void VortexAudioProcessor::processBlock(
                     static_cast<float>(currentSampleRate);
                 const float readingMs = juce::jmap(delayFade, fromMs, toMs)
                     + (headAGain * headAOffset + headBGain * headBOffset) * samplesToMs;
-                if (v == 0 || v == 1)
-                    finalDoublerMs[v] = juce::jmax(0.0f, readingMs);
+                if (sample == sampleCount - 1)
+                {
+                    const float currentMs = juce::jmax(0.0f, readingMs);
+                    if (! doublerGuideHasTap)
+                    {
+                        finalDoublerMs[0] = finalDoublerMs[1] = currentMs;
+                        doublerGuideHasTap = true;
+                    }
+                    else
+                    {
+                        finalDoublerMs[0] = juce::jmin(finalDoublerMs[0], currentMs);
+                        finalDoublerMs[1] = juce::jmax(finalDoublerMs[1], currentMs);
+                    }
+                }
                 const float headMinimumMs = juce::jmin(headAOffset, headBOffset)
                     * samplesToMs;
                 const float headMaximumMs = juce::jmax(headAOffset, headBOffset)
@@ -1848,8 +1905,6 @@ void VortexAudioProcessor::processBlock(
                 else
                     doublerSamples[0] += gain * doubleVoice;
             }
-            if (doubleVoiceGains[1] <= 0.0000001f)
-                finalDoublerMs[1] = finalDoublerMs[0];
             // Boost the completed Doubler wet signal equally for both routing modes.
             for (auto& channelWet : doublerSamples)
                 channelWet *= doublerWetGain;
@@ -1982,15 +2037,20 @@ void VortexAudioProcessor::processBlock(
         std::memory_order_relaxed);
     phaserDisplayMinimumHz.store(finalPhaserMinimum, std::memory_order_relaxed);
     phaserDisplayMaximumHz.store(finalPhaserMaximum, std::memory_order_relaxed);
+    // Publish each Chorus voice's actual stereo-centre delay position for
+    // the GUI (one dot per active voice, with no extra audio processing).
+    for (size_t voice = 0; voice < finalChorusVoiceMs.size(); ++voice)
+        chorusVoiceDisplayMs[voice].store(finalChorusVoiceMs[voice],
+                                         std::memory_order_relaxed);
+    chorusVoiceDisplayCount.store(finalChorusVoiceCount,
+                                  std::memory_order_relaxed);
+    for (size_t marker = 0; marker < finalChorusMs.size(); ++marker)
+        chorusDisplayMs[marker].store(finalChorusMs[marker],
+                                     std::memory_order_relaxed);
     for (size_t channel = 0; channel < channelCount; ++channel)
-    {
-        chorusDisplayMs[channel].store(
-            finalChorusMs[activeChannels > static_cast<int>(channel) ? channel : 0],
-            std::memory_order_relaxed);
         flangerDisplayMs[channel].store(
             finalFlangerMs[activeChannels > static_cast<int>(channel) ? channel : 0],
             std::memory_order_relaxed);
-    }
     chorusDisplayMinimumMs.store(finalChorusMinimumMs, std::memory_order_relaxed);
     chorusDisplayMaximumMs.store(finalChorusMaximumMs, std::memory_order_relaxed);
     flangerDisplayMinimumMs.store(finalFlangerMinimumMs, std::memory_order_relaxed);

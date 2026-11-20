@@ -3379,7 +3379,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
     content.addMouseListener(this, true);
     content.setInterceptsMouseClicks(false, true);
 
-    versionLabel.setText("v1.24.13", juce::dontSendNotification);
+    versionLabel.setText("v1.24.18", juce::dontSendNotification);
     versionLabel.setJustificationType(juce::Justification::centred);
     versionLabel.setColour(juce::Label::textColourId, knobIndicatorColour);
     versionLabel.setFont(juce::Font(juce::FontOptions(8.5f,
@@ -3416,7 +3416,7 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
       "Flanger sweep rate.", "Flanger delay depth.",
       "Flanger feedback, -100% to +100%; negative reverses polarity.",
       "Tightness moves the base doubling delay (with click-free crossfades).",
-      "Independent voice detuning up to +/-36 cents, with smooth crossfades.",
+      "Detune amount in cents (0-36c). Voices shift up and down in pitch.",
       "Stereo separation of the eight independently placed doubled voices.",
       "Pitch sweep rate, 0-100%, about 0.1-3.6 Hz internally.",
       "Doubler pitch-sweep depth, 0-250% (up to about +/-120 cents).",
@@ -3425,10 +3425,10 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
       "Phaser centre frequency, 75 Hz-7.5 kHz. Depth controls its sweep.",
       "Flanger L/R LFO phase offset, 0-180 deg. Default: 90 deg.",
       "Flanger base delay, 0-12 ms. Higher offsets lower the comb notches.",
-      "Flanger LFO wave: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Rnd Sq.",
+      "Flanger LFO wave: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Round Square.",
       "Flanger tone: 0% deep low-pass to 100% unfiltered.",
-      "Chorus LFO wave: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Rnd Sq.",
-      "Phaser LFO: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Rnd Sq." };
+      "Chorus LFO wave: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Round Square.",
+      "Phaser LFO: Sine, Tri, Saw, Ramp, Exp, Inv Exp, Random or Round Square." };
     static_assert(std::tuple_size<decltype(effectDials)>::value == effectIds.size(),
         "Effect dial array must match parameter IDs");
     static_assert(effectCaptions.size() == effectIds.size());
@@ -3476,6 +3476,25 @@ VortexAudioProcessorEditor::VortexAudioProcessorEditor(VortexAudioProcessor& p)
         content.addAndMakeVisible(button);
         effectEnabledAttachments[i] = std::make_unique<ButtonAttachment>(
             processor.parameters, enableIds[i], button);
+    }
+    static constexpr std::array<const char*, 4> guideNames {
+        "Chorus Guide", "Phaser Guide", "Doubler Guide", "Flanger Guide" };
+    static constexpr std::array<const char*, 4> guideHelp {
+        "Grey: 0-115 ms; red: sweep span; one dot per active Chorus voice (L/R average).",
+        "Grey: 25-12000 Hz (log); red: frequency span; dots: current L/R sweeps.",
+        "Grey: 0-1350 ms (log); red: delay span; dots: current outermost voices.",
+        "Grey: 0-18 ms; red: delay span; dots: current left/right taps." };
+    for (size_t i = 0; i < sweepGuideHotspots.size(); ++i)
+    {
+        auto& guide = sweepGuideHotspots[i];
+        guide.setName(guideNames[i]);
+        guide.setTooltip(guideHelp[i]);
+        guide.setColour(juce::Label::backgroundColourId,
+                        juce::Colours::transparentBlack);
+        guide.setColour(juce::Label::outlineColourId,
+                        juce::Colours::transparentBlack);
+        guide.setInterceptsMouseClicks(true, false);
+        content.addAndMakeVisible(guide);
     }
     mixDial = addDial("mix", "MIX",
         "Blend the dry sound with the enabled effects in parallel.");
@@ -4017,6 +4036,8 @@ void VortexAudioProcessorEditor::updatePresetBrowserVisibility()
     }
     for (auto& button : effectEnabledButtons)
         button.setVisible(! presetBrowserOpen);
+    for (auto& guide : sweepGuideHotspots)
+        guide.setVisible(! presetBrowserOpen);
     information.setVisible(! presetBrowserOpen);
     randomButton.setVisible(! presetBrowserOpen);
     mixLockButton.setVisible(! presetBrowserOpen);
@@ -5146,14 +5167,14 @@ void VortexAudioProcessorEditor::paint(juce::Graphics& g)
         g.drawText("FLANGER", 462, 149, 92, 13,
                    juce::Justification::centredLeft);
 
-        // Each display reads the smoothed DSP positions published once per
-        // block. The red portion denotes the swept range; two dots show
-        // current L/R taps (or two representative voices for Doubler).
+        // Grey is the fixed scale, red the modulated range. Chorus renders
+        // one dot per active voice below; the other guides retain two dots.
         const auto drawSweepGuide = [&g](const std::array<float, 4>& display,
                                         bool active,
                                         float x, float y, float width,
                                         float domainMin, float domainMax,
-                                        int scaleMode)
+                                        int scaleMode,
+                                        bool drawPairMarkers = true)
         {
             const auto toBar = [=](float value)
             {
@@ -5177,13 +5198,35 @@ void VortexAudioProcessorEditor::paint(juce::Graphics& g)
                 return; // No red range or moving markers while bypassed.
             g.setColour(juce::Colour(0xffc63b3b));
             g.drawLine(toBar(low), y, toBar(high), y, 4.0f);
-            g.setColour(juce::Colour(0xffff8e76));
-            g.fillEllipse(toBar(display[0]) - 3.0f, y - 3.0f, 6.0f, 6.0f);
-            g.setColour(juce::Colour(0xfff4d577));
-            g.fillEllipse(toBar(display[1]) - 2.5f, y - 2.5f, 5.0f, 5.0f);
+            if (drawPairMarkers)
+            {
+                g.setColour(juce::Colour(0xffff8e76));
+                g.fillEllipse(toBar(display[0]) - 3.0f, y - 3.0f, 6.0f, 6.0f);
+                g.setColour(juce::Colour(0xfff4d577));
+                g.fillEllipse(toBar(display[1]) - 2.5f, y - 2.5f, 5.0f, 5.0f);
+            }
         };
         drawSweepGuide(processor.getChorusSweepDisplay(),
-                       effectPanelEnabled[0], 155.0f, 69.5f, 250.0f, 0.0f, 115.0f, 0);
+                       effectPanelEnabled[0], 155.0f, 69.5f, 250.0f,
+                       0.0f, 115.0f, 0, false);
+        if (effectPanelEnabled[0])
+        {
+            const auto positions = processor.getChorusVoiceDisplayMs();
+            const int voices = juce::jlimit(0, 8,
+                processor.getChorusDisplayVoiceCount());
+            for (int voice = 0; voice < voices; ++voice)
+            {
+                const float delayMs = juce::jlimit(0.0f, 115.0f,
+                    positions[static_cast<size_t>(voice)]);
+                const float dotX = 155.0f + 250.0f * (delayMs / 115.0f);
+                // Slight alternating Y offsets help separate overlapping
+                // voices, without altering their actual X delay positions.
+                const float dotY = 69.5f + (voice % 2 == 0 ? -1.6f : 1.6f);
+                g.setColour(voice % 2 == 0 ? juce::Colour(0xffff8e76)
+                                          : juce::Colour(0xfff4d577));
+                g.fillEllipse(dotX - 2.6f, dotY - 2.6f, 5.2f, 5.2f);
+            }
+        }
         auto phaserGuide = processor.getPhaserSweepDisplay();
         if (phaserGuide[2] <= 0.0f) // Before the first audio block
         {
@@ -5254,31 +5297,44 @@ void VortexAudioProcessorEditor::resized()
         dial->label.setFont(juce::Font(juce::FontOptions(
             10.5f, juce::Font::bold)));
     };
-    // All seven Chorus knobs match the Doubler's 58 px equal spacing.
-    // WAVE replaces the Chorus header dropdown; panel stays 82 px high.
-    for (int i = 0; i < 7; ++i)
-        placeEffectDial(effectDials[static_cast<size_t>(i == 6 ? 24 : i)],
-                        47 + 58 * i, 82);
-    // Phaser now matches Flanger: seven full-size knobs in the same row.
+    // Shared layout: RATE, DEPTH, FEEDBK; stereo in slot 4,
+    // VOICES/STAGES in slot 5, WAVE last. Only positions change.
+    const std::array<Dial*, 7> chorusDials {
+        effectDials[0], effectDials[1], effectDials[4], effectDials[5],
+        effectDials[3], effectDials[2], effectDials[24] };
+    for (size_t i = 0; i < chorusDials.size(); ++i)
+        placeEffectDial(chorusDials[i], 47 + 58 * static_cast<int>(i), 82);
+    // Phaser: keep FEEDBK third and move SPREAD/STAGES into slots 4/5.
     const std::array<Dial*, 7> phaserDials {
-        effectDials[6], effectDials[7], effectDials[8], effectDials[19],
-        phaserDetailDials[0], phaserDetailDials[1], effectDials[25] };
+        effectDials[6], effectDials[7], phaserDetailDials[0], phaserDetailDials[1],
+        effectDials[8], effectDials[19], effectDials[25] };
     for (size_t i = 0; i < phaserDials.size(); ++i)
         placeEffectDial(phaserDials[i], 459 + 58 * static_cast<int>(i), 82);
-    // Seven equal-size Flanger knobs, 58 px apart, fully inside 409 px panel.
+    // Flanger retains RATE/DEPTH/FEEDBK/PHASE/OFFSET; TONE precedes WAVE.
     const std::array<Dial*, 7> flangerDials {
         effectDials[9], effectDials[10], effectDials[11],
-        effectDials[20], effectDials[21], effectDials[22], effectDials[23] };
+        effectDials[20], effectDials[21], effectDials[23], effectDials[22] };
     for (size_t i = 0; i < flangerDials.size(); ++i)
         placeEffectDial(flangerDials[i], 459 + 58 * static_cast<int>(i), 168);
-    for (int i = 0; i < 7; ++i)
-        placeEffectDial(effectDials[static_cast<size_t>(12 + i)],
-                        47 + 58 * i, 168);
+    // Place Doubler RATE and DEPTH first, matching the other three engines.
+    // Reposition existing dials only; parameter IDs and sequencer targets stay
+    // attached to their original controls.
+    const std::array<Dial*, 7> doublerDials {
+        effectDials[15], effectDials[16], effectDials[12], effectDials[14],
+        effectDials[18], effectDials[13], effectDials[17] };
+    for (size_t i = 0; i < doublerDials.size(); ++i)
+        placeEffectDial(doublerDials[i], 47 + 58 * static_cast<int>(i), 168);
     // Match the LED inset to the panel borders: 3 px from top and left.
     effectEnabledButtons[0].setBounds(21, 65, 17, 17);
     effectEnabledButtons[1].setBounds(432, 65, 17, 17);
     effectEnabledButtons[2].setBounds(432, 151, 17, 17);
     effectEnabledButtons[3].setBounds(21, 151, 17, 17);
+    // Transparent guide hover zones follow the painted header bars exactly.
+    // No change to the bar geometry or effect panel height.
+    sweepGuideHotspots[0].setBounds(155, 61, 250, 17);
+    sweepGuideHotspots[1].setBounds(565, 61, 252, 17);
+    sweepGuideHotspots[2].setBounds(155, 147, 250, 17);
+    sweepGuideHotspots[3].setBounds(565, 147, 252, 17);
     // SVG viewBox is 615:158, so at 43 px tall its visible width is 167 px.
     logoHotspot.setBounds(22, 5, 170, 43);
     placeDial(mixDial, 845, 67);

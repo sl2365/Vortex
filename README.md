@@ -17,6 +17,12 @@ The interface is designed for immediate adjustment: the four effects remain visi
 
 Credits: Many thanks to Artvera for the logo.
 
+## Requirements
+
+- Windows x64
+- A 64-bit VST3 host
+- A writable VST3 folder if Vortex's portable settings, presets and sequences are to remain beside the plug-in
+
 ## Getting started
 
 1. Load Vortex as an audio effect on a track in your VST3-compatible Windows DAW.
@@ -37,10 +43,10 @@ Adds moving, layered copies of the original sound. Use it for subtle width, lush
 |---|---|
 | **RATE** | Sets modulation speed, from 0.01 to 10 Hz. |
 | **DEPTH** | Sets delay-time modulation, from 0 to 24 ms. |
-| **PRE DLY** | Sets the starting delay, from 0 to 50 ms. |
-| **VOICES** | Selects 1 to 8 chorus voices; more voices can produce a denser, wider sound. |
 | **FEEDBK** | Adds regeneration, from 0 to 100%, for more pronounced modulation. |
 | **WIDTH** | Sets stereo width, from 0 to 200%. |
+| **VOICES** | Selects 1 to 8 chorus voices; more voices can produce a denser, wider sound. |
+| **PRE DLY** | Sets the starting delay, from 0 to 50 ms. |
 | **WAVE** | Selects one of eight LFO shapes. |
 
 For a gentle chorus, begin with low Feedback and moderate Rate and Depth. For a bigger ensemble, increase Voices and Width before adding Feedback.
@@ -53,10 +59,10 @@ Creates moving frequency cancellations and peaks. It can produce a subtle sweep 
 |---|---|
 | **RATE** | Controls the speed of the frequency sweep. |
 | **DEPTH** | Controls how far the sweep travels. |
-| **STAGES** | Selects the phaser's all-pass stages (2 to 12 poles). |
-| **FREQ** | Sets the centre frequency, from 75 Hz to 7.5 kHz. |
 | **FEEDBK** | Adds positive or negative feedback, from -90% to +90%. |
 | **SPREAD** | Sets left/right LFO phase difference, from 0 to 180 degrees. |
+| **STAGES** | Selects the phaser's all-pass stages (2 to 12 poles). |
+| **FREQ** | Sets the centre frequency, from 75 Hz to 7.5 kHz. |
 | **WAVE** | Selects one of eight LFO shapes. |
 
 Start with a slow Rate and moderate Depth. Increase Feedback to accentuate the effect, or adjust FREQ to move the sweep into a different frequency region.
@@ -72,8 +78,8 @@ Uses a short, changing delay to generate a sweeping comb-filter effect. It can r
 | **FEEDBK** | Sets negative or positive feedback, from -100% to +100%. |
 | **PHASE** | Offsets the left/right LFOs, from 0 to 180 degrees. |
 | **OFFSET** | Sets base delay time, from 0 to 12 ms, changing the comb-filter position. |
-| **WAVE** | Selects one of eight LFO shapes. |
 | **TONE** | Ranges from heavily low-pass filtered at 0% to unfiltered at 100%. |
+| **WAVE** | Selects one of eight LFO shapes. |
 
 Try changing OFFSET and TONE with Feedback raised to explore different resonances. Very high feedback can be intense, so monitor the output level.
 
@@ -83,13 +89,13 @@ Creates up to eight additional, independently moving voices. It is intended for 
 
 | Control | What it does |
 |---|---|
-| **TIGHT** | Adjusts how closely the simulated doubles follow the source. |
-| **DETUNE** | Introduces independent pitch differences between voices. |
-| **SPREAD** | Separates the voices across the stereo field. |
 | **RATE** | Sets the speed of the pitch movement. |
 | **DEPTH** | Sets the amount of pitch movement. |
-| **TIMING** | Adds delay offsets, from 0 to 800 ms. |
+| **TIGHT** | Adjusts how closely the simulated doubles follow the source. |
+| **SPREAD** | Separates the voices across the stereo field. |
 | **VOICES** | Selects 1 to 8 doubled voices. |
+| **DETUNE** | Sets the maximum per-voice pitch difference from 0 to +/-36 cents. The knob displays cents; voices detune both above and below the source pitch. |
+| **TIMING** | Adds delay offsets, from 0 to 800 ms. |
 
 For a natural double, start with several voices, moderate Spread and short Timing. Larger Timing settings can sound like distinct repeats rather than tightly layered performances.
 
@@ -97,14 +103,22 @@ For a natural double, start with several voices, moderate Spread and short Timin
 
 Chorus, Phaser and Flanger share eight **WAVE** choices: **Sine, Triangle, Sawtooth, Ramp, Exponential, Inverse Exponential, Random and Rounded Square**. Their individual RATE knobs control how quickly those waveforms move.
 
-Each effect panel also has a red modulation guide next to its heading:
+Each effect panel has a live modulation guide beside its heading. It measures the effect's actual timing or frequency behaviour; it is **not a level meter**:
 
-- **Chorus:** Shows the moving delay-time range.
-- **Phaser:** Shows the frequency sweep and its left/right positions.
-- **Flanger:** Shows the short-delay sweep and its left/right positions.
-- **Doubler:** Shows the timing spread of the doubled voices, with two representative moving markers.
+- **Grey track:** The complete fixed display scale, which does not change when DEPTH changes.
+- **Red section:** The available modulation range at the current settings. It usually becomes shorter as DEPTH decreases, and does not need to reach either end of the grey track.
+- **Moving dots:** The current modulation positions. **Chorus displays one dot per active voice** (1–8), at the average of that voice's actual left and right delay times, or the single delay time in mono. **Doubler** shows the minimum and maximum active voice delay times; **Phaser and Flanger** show their left/right positions. The dots need not touch the red range's ends at every instant.
 
-The guides reflect the effects' modulation rather than controlling it. When an effect is off, its guide becomes a stationary grey bar.
+| Effect | What the grey track measures | Scale |
+|---|---|---|
+| **Chorus** | Delay time | 0–115 ms, linear |
+| **Phaser** | All-pass sweep frequency | 25–12,000 Hz, logarithmic |
+| **Flanger** | Short delay time | 0–18 ms, linear |
+| **Doubler** | Delay time of the generated voices | 0–1,350 ms, logarithmic-style (`log1p`) |
+
+The red section is the expected delay/frequency span from the current settings, rather than a historical record of all positions reached. For Doubler it also accounts for the read-head positions used while timing and detuning changes are crossfaded. An effect may legitimately use only part of its fixed scale even at maximum DEPTH, because its other controls (such as PRE DLY, OFFSET, FREQ or TIMING) also determine the range.
+
+When an effect is switched off, its guide becomes a stationary grey track without live dots.
 
 ## Switching and balancing effects
 
@@ -172,7 +186,7 @@ The folder is created when needed. `Settings` holds interface settings such as z
 
 ## Build and development information
 
-### Requirements
+### Build requirements
 
 - **Platform:** Windows x64, VST3-compatible DAW.
 - **Source framework:** JUCE 9.0.4 and C++17.
@@ -193,7 +207,7 @@ The build script does **not** install the plug-in automatically. The documentati
 
 | Item | Value |
 |---|---|
-| Current version | **v1.24.13** |
+| Current version | **v1.24.18** |
 | Plug-in format | Windows x64 VST3 audio effect |
 | Company | Dead Channel Audio |
 | Manufacturer / plug-in codes | `sl23` / `vtx1` |
@@ -208,6 +222,6 @@ The project was developed from the stripped Dusk/Afterglow interface template. I
 
 ### Verification and compatibility
 
-The source has undergone static consistency checks, but the **v1.24.13 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
+The source has undergone static consistency checks, but the **v1.24.18 Windows build and complete DAW regression test have not been independently verified in this environment**. Before publishing a release, check all four engines, live guides, waveform changes, gate routing, sequencer target assignments, presets, zoom, CPU use and stereo/mono behaviour in the intended hosts.
 
 Because Vortex has not previously been released, compatibility with older development presets and automation mappings is not guaranteed. There is no migration from the earlier prototype data-folder names.

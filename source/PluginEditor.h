@@ -209,6 +209,8 @@ private:
     std::array<Dial*, 2> phaserDetailDials {};
     std::array<Dial*, 4> effectLevelDials {};
     std::array<juce::ToggleButton, 4> effectEnabledButtons {};
+    // Invisible hover zones over the painted guide bars; no extra artwork.
+    std::array<juce::Label, 4> sweepGuideHotspots {};
     std::array<std::unique_ptr<ButtonAttachment>, 4> effectEnabledAttachments {};
     std::array<bool, 4> effectPanelEnabled { true, true, true, true };
     Dial* mixDial = nullptr;
